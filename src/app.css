@@ -1,0 +1,77 @@
+@import "tailwindcss";
+@plugin "daisyui";
+
+/* Editor typography */
+.editor-serif {
+  font-family: Georgia, Cambria, "Times New Roman", Times, serif;
+}
+.editor-sans {
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+}
+.editor-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+}
+
+/* ---------- hover tooltips for compact / icon-only controls ----------
+ * Put data-tip on a plain wrapper (not the button itself) so the tooltip still
+ * shows when the inner button is disabled. Default points up; add
+ * data-tip-pos="down" for controls near the top edge of the window and
+ * data-tip-align="end" for controls near the right edge so long tips anchor
+ * to their left instead of running off-screen. */
+[data-tip] {
+  position: relative;
+}
+[data-tip]:hover::after,
+[data-tip]:focus-within::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--color-base-content);
+  background: var(--color-base-200);
+  border: 1px solid var(--color-base-300);
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.18);
+  opacity: 0;
+  transition: opacity 100ms ease 250ms;
+  pointer-events: none;
+  z-index: 60;
+}
+[data-tip]:hover::after,
+[data-tip]:focus-within::after {
+  opacity: 1;
+}
+[data-tip][data-tip-pos="down"]:hover::after,
+[data-tip][data-tip-pos="down"]:focus-within::after {
+  bottom: auto;
+  top: calc(100% + 6px);
+}
+[data-tip][data-tip-align="end"]:hover::after,
+[data-tip][data-tip-align="end"]:focus-within::after {
+  left: auto;
+  right: 0;
+  transform: none;
+}
+
+/* ---------- highlight for freshly generated LLM text ---------- */
+.gen-new {
+  position: absolute;
+  pointer-events: none;
+  background-color: color-mix(in oklab, var(--color-primary) 25%, transparent);
+  border-radius: 2px;
+}
+
+/* ---------- warm off-white light theme -----------------------------------
+ * Unlayered rule so it wins over daisyUI's layered light theme, whose default
+ * base-100 is pure white. We want a softer paper tone instead (the dark theme
+ * and the primary accent are untouched). */
+[data-theme='light'] {
+  --color-base-100: #f7f6f2;
+  --color-base-200: #efece6;
+  --color-base-300: #e3e0d8;
+}
