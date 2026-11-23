@@ -15,7 +15,7 @@ import { downloadFile, slugify, uid, wordCount } from './lib/format'
 import { buildProjectFile, parseProjectFile, PROJECT_FORMAT } from './lib/project'
 import type { ProjectFile } from './lib/project'
 import { listModels } from './lib/llm'
-import { characterText, renderSystemPrompt, worldText } from './lib/prompts'
+import { characterText, effectiveMaxTokens, renderSystemPrompt, worldText } from './lib/prompts'
 import { computeBudget } from './lib/tokens'
 import TopBar from './components/TopBar.svelte'
 import EditorPane from './components/EditorPane.svelte'
@@ -39,6 +39,7 @@ let settings = $state<AppSettings>({
   fontSize: 'md',
   measure: 'normal',
   fontFamily: 'serif',
+  replyLength: 1024,
 })
 
 // ---------- session state ----------
@@ -64,7 +65,15 @@ const activeProfile = $derived(
 const activeModelInfo = $derived(models.find((m) => m.id === activeProfile?.modelId) ?? null)
 /** Effective context window: per-doc override → model metadata → conservative default. */
 const maxContext = $derived(activeDoc?.contextOverride ?? activeModelInfo?.contextLength ?? 8192)
+/** Warn (but still honor the override) when it exceeds the model's reported context length. */
+const contextExceedsModel = $derived(
+  activeDoc?.contextOverride != null &&
+  typeof activeModelInfo?.contextLength === 'number' &&
+  activeDoc.contextOverride > activeModelInfo.contextLength,
+)
 const modelLabel = $derived(activeProfile?.modelId ?? '')
+/** Effective reply cap: top-bar slider, further limited by the profile's max tokens (if set). */
+const replyCap = $derived(effectiveMaxTokens(activeProfile, settings.replyLength))
 
 /** Approximate token budget for the active doc, shown in the Context tab. */
 const budget = $derived.by((): BudgetBreakdown | null => {
@@ -78,7 +87,7 @@ const budget = $derived.by((): BudgetBreakdown | null => {
     characterText: characterText(d),
     toneText: d.tone,
     storyContent: d.content,
-    reserveTokens: p.params.maxTokens > 0 ? p.params.maxTokens : 500,
+    reserveTokens: replyCap,
   })
   return {
     systemTokens: b.systemTokens,
@@ -513,6 +522,8 @@ $effect(() => {
     onOpenCustom={() => (commandRef = { kind: 'open-custom' })}
     onOpenInstruct={() => (commandRef = { kind: 'open-instruct' })}
     onStop={() => (commandRef = { kind: 'stop' })}
+    replyLength={settings.replyLength}
+    onSetReplyLength={(n) => (settings.replyLength = n)}
   />
 
   <div class="flex min-h-0 flex-1">
@@ -528,6 +539,7 @@ $effect(() => {
             profile={activeProfile}
             command={commandRef}
             maxContext={maxContext}
+            maxReplyTokens={replyCap}
             fontSize={settings.fontSize}
             measure={settings.measure}
             fontFamily={settings.fontFamily}
@@ -561,6 +573,7 @@ $effect(() => {
     words={activeDoc ? wordCount(activeDoc.content) : 0}
     budget={budget}
     maxContext={maxContext}
+    exceedsModel={contextExceedsModel}
     genStats={genStats}
     profiles={profiles}
     activeProfile={activeProfile}
@@ -615,6 +628,8 @@ $effect(() => {
     budget={budget}
     maxContext={maxContext}
     modelLabel={modelLabel}
+    exceedsModel={contextExceedsModel}
+    modelContext={activeModelInfo?.contextLength}
   />
 
   <!-- Styled confirmation dialog — replaces the unthemed native window.confirm.

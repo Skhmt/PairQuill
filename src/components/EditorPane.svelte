@@ -1,9 +1,9 @@
 <script lang="ts">
-import type { EditorCommand, GenStats, GenerationRecord, OpKind, ServerProfile, StoryDoc } from '../lib/types'
+import type { EditorCommand, GenStats, GenerationRecord, OpKind, SamplingParams, ServerProfile, StoryDoc } from '../lib/types'
 import { uid, wordCount } from '../lib/format'
 import { estimateTokens } from '../lib/tokens'
 import { chatStream } from '../lib/llm'
-import { OP_LABELS, buildContinueRequest, buildInstructRequest, buildOpRequest, toMessages } from '../lib/prompts'
+import { OP_LABELS, buildContinueRequest, buildInstructRequest, buildOpRequest, effectiveMaxTokens, toMessages } from '../lib/prompts'
 import type { BuiltRequest } from '../lib/prompts'
 
 let {
@@ -11,6 +11,7 @@ let {
   profile,
   command,
   maxContext,
+  maxReplyTokens,
   fontSize,
   measure,
   fontFamily,
@@ -25,6 +26,8 @@ let {
   profile: ServerProfile | null
   command: EditorCommand | null
   maxContext: number
+  /** Effective cap for reply length in tokens (top-bar slider ∩ profile max tokens). */
+  maxReplyTokens: number
   fontSize: 'sm' | 'md' | 'lg'
   measure: 'narrow' | 'normal' | 'wide'
   fontFamily: 'serif' | 'sans' | 'mono'
@@ -296,6 +299,8 @@ async function runOp(op: OpKind, customInstruction?: string) {
     onError('Select a model for this profile first (gear icon → Servers).')
     return
   }
+  // The top-bar slider caps reply length; the profile's own max tokens (if set) is a hard cap.
+  const effParams: SamplingParams = { ...profile.params, maxTokens: effectiveMaxTokens(profile, maxReplyTokens) }
 
   const el = textareaEl
   let anchor: number
@@ -322,8 +327,8 @@ async function runOp(op: OpKind, customInstruction?: string) {
       selEnd = anchor
       req =
         prev.op === 'instruct'
-          ? buildInstructRequest(profile, doc, anchor, maxContext, prev.instruction)
-          : buildContinueRequest(profile, doc, anchor, maxContext)
+          ? buildInstructRequest(profile, doc, anchor, maxContext, prev.instruction, effParams.maxTokens)
+          : buildContinueRequest(profile, doc, anchor, maxContext, effParams.maxTokens)
     } else {
       onError('The last generated text was edited. Select a passage to retry that operation.')
       return
@@ -334,8 +339,8 @@ async function runOp(op: OpKind, customInstruction?: string) {
     selEnd = anchor
     req =
       op === 'instruct'
-        ? buildInstructRequest(profile, doc, anchor, maxContext, customInstruction ?? '')
-        : buildContinueRequest(profile, doc, anchor, maxContext)
+        ? buildInstructRequest(profile, doc, anchor, maxContext, customInstruction ?? '', effParams.maxTokens)
+        : buildContinueRequest(profile, doc, anchor, maxContext, effParams.maxTokens)
   } else {
     if (!selRange || selRange.end - selRange.start < 1) {
       onError('Select some text first, then try again.')
@@ -374,7 +379,7 @@ async function runOp(op: OpKind, customInstruction?: string) {
       model: profile.modelId,
       op,
       instruction: op === 'custom' || op === 'instruct' ? (customInstruction?.trim() ?? '') : '',
-      params: { ...profile.params },
+      params: effParams,
       systemPrompt: req.systemPrompt,
       output: full,
       promptTokens: promptTokens ?? estPrompt,
@@ -388,7 +393,7 @@ async function runOp(op: OpKind, customInstruction?: string) {
       profile.apiKey,
       profile.modelId,
       toMessages(req.systemPrompt, req.userMessage),
-      profile.params,
+      effParams,
       controller.signal,
       {
         onToken: (t) => {

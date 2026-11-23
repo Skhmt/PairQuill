@@ -26,6 +26,8 @@ let {
   onOpenCustom,
   onOpenInstruct,
   onStop,
+  replyLength,
+  onSetReplyLength,
 }: {
   theme: 'light' | 'dark'
   hasDoc: boolean
@@ -55,6 +57,9 @@ let {
   onOpenCustom: () => void
   onOpenInstruct: () => void
   onStop: () => void
+  /** Reply-length setting in tokens (top-bar slider, left of the selection ops). */
+  replyLength: number
+  onSetReplyLength: (tokens: number) => void
 } = $props()
 
 let menuOpen = $state(false)
@@ -92,6 +97,26 @@ const OPS: { kind: OpKind; icon: string; tip: string }[] = [
 const ITEM = 'flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-sm hover:bg-base-300 disabled:pointer-events-none disabled:opacity-40'
 /** One option of a segmented control inside a menu row (text size / line length). */
 const SEG = 'px-2 py-0.5 leading-tight'
+
+// ---------- reply-length slider (log scale: 2^7 … 2^14 tokens) ----------
+const REPLY_MIN_EXP = 7 // 128 tokens — a few sentences
+const REPLY_MAX_EXP = 14 // 16384 tokens — ~16 pages of prose
+const REPLY_LABELS: Record<number, string> = {
+  128: 'a few sentences',
+  256: 'a paragraph',
+  512: 'a few paragraphs',
+  1024: '~1 page',
+  2048: '~2 pages',
+  4096: '~4 pages',
+  8192: '~8 pages',
+  16384: '~16 pages',
+}
+/** Nearest slider step for the current setting (every saved value is a power of two). */
+const replyExp = $derived(Math.min(REPLY_MAX_EXP, Math.max(REPLY_MIN_EXP, Math.round(Math.log2(replyLength)))))
+const replyTokens = $derived(2 ** replyExp)
+const replyLabel = $derived(REPLY_LABELS[replyTokens] ?? `${Math.round(replyLength).toLocaleString()} tokens`)
+/** Constant tooltip — the live value is shown right in the bar, so keep this static. */
+const REPLY_TIP = 'Reply length — how long generated replies may be. A profile’s max-token limit still applies.'
 </script>
 
 <header class="flex h-12 shrink-0 items-center gap-2 border-b border-base-300 bg-base-100 px-3">
@@ -225,6 +250,25 @@ const SEG = 'px-2 py-0.5 leading-tight'
     {#if selection.has && !genStats.active}
       <span class="hidden whitespace-nowrap text-xs opacity-50 lg:inline">{selection.words} words selected</span>
     {/if}
+
+    <!-- Reply length: caps how long a generated reply may be (left of the selection ops) -->
+    <span class="h-5 w-px shrink-0 bg-base-300"></span>
+    <label class="flex items-center gap-1.5" data-tip={REPLY_TIP} data-tip-pos="down">
+      <i class="fa-solid fa-ruler-horizontal text-xs opacity-50" aria-hidden="true"></i>
+      <input
+        type="range"
+        min={REPLY_MIN_EXP}
+        max={REPLY_MAX_EXP}
+        step={1}
+        value={replyExp}
+        oninput={(e) => onSetReplyLength(2 ** Number((e.target as HTMLInputElement).value))}
+        class="range range-primary range-xs w-20 sm:w-28"
+        aria-label="Reply length"
+      />
+      <!-- Fixed widths so the bar never reflows while dragging -->
+      <span class="w-9 whitespace-nowrap text-right text-[11px] leading-tight tabular-nums opacity-60">{replyTokens.toLocaleString()}</span>
+      <span class="hidden w-[7rem] whitespace-nowrap text-left text-[11px] leading-tight opacity-60 md:inline">({replyLabel})</span>
+    </label>
 
     <!-- Selection operations: always visible, disabled until a passage is selected -->
     <span class="h-5 w-px shrink-0 bg-base-300"></span>

@@ -154,7 +154,7 @@ function setField<K extends keyof ServerProfile>(key: K, value: ServerProfile[K]
           <label class="form-control text-xs opacity-70">Temperature
             <input type="number" min={0} max={2} step={0.1} class="input input-bordered input-sm mt-1" value={profile.params.temperature} onchange={(e) => { if (profile) profile.params.temperature = Number((e.target as HTMLInputElement).value) }} />
           </label>
-          <label class="form-control text-xs opacity-70">Max tokens (0 = unset)
+          <label class="form-control text-xs opacity-70">Max tokens (hard cap · 0 = reply length slider)
             <input type="number" min={0} step={64} class="input input-bordered input-sm mt-1" value={profile.params.maxTokens} onchange={(e) => { if (profile) profile.params.maxTokens = Number((e.target as HTMLInputElement).value) }} />
           </label>
         </div>

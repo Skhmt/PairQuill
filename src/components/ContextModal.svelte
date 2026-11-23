@@ -8,6 +8,8 @@ let {
   budget,
   maxContext,
   modelLabel,
+  exceedsModel,
+  modelContext,
 }: {
   open: boolean
   onClose: () => void
@@ -15,6 +17,8 @@ let {
   budget: BudgetBreakdown | null
   maxContext: number
   modelLabel: string
+  exceedsModel: boolean
+  modelContext?: number
 } = $props()
 
 let dlg: HTMLDialogElement | undefined = $state()
@@ -51,6 +55,14 @@ const pct = (t: number) => (maxContext > 0 ? Math.max(0, Math.min(100, (t / maxC
             <span class="shrink-0 text-[11px] opacity-50" title="Model">{modelLabel || '—'}</span>
           </div>
           <p class="mt-1 text-[11px] opacity-50">Leave empty to use the model's reported context length.</p>
+          {#if exceedsModel}
+            <p class="mt-1 flex items-start gap-1.5 text-[11px] font-medium text-warning">
+              <i class="fa-solid fa-triangle-exclamation mt-0.5 shrink-0"></i>
+              <span>
+                This override exceeds the model's reported context length ({modelContext?.toLocaleString()}). The server may truncate or reject prompts this large.
+              </span>
+            </p>
+          {/if}
         </div>
 
         {#if budget}

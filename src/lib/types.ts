@@ -75,6 +75,8 @@ export interface AppSettings {
   measure: 'narrow' | 'normal' | 'wide'
   /** Editor font family (persisted). */
   fontFamily: 'serif' | 'sans' | 'mono'
+  /** Max length of a generated reply in tokens — top-bar slider (persisted). */
+  replyLength: number
 }
 
 /** Commands the editor executes (insert text / run an op / open a dialog / stop). */

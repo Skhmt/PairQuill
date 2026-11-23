@@ -5,6 +5,7 @@ let {
   words,
   budget,
   maxContext,
+  exceedsModel,
   genStats,
   profiles,
   activeProfile,
@@ -18,6 +19,7 @@ let {
   words: number
   budget: BudgetBreakdown | null
   maxContext: number
+  exceedsModel: boolean
   genStats: GenStats
   profiles: ServerProfile[]
   activeProfile: ServerProfile | null
@@ -55,7 +57,9 @@ function shortModel(m: ModelInfo): string {
 
   <button
     class="btn btn-ghost h-auto min-h-0 cursor-pointer items-center gap-2 px-1 py-0.5 text-xs"
-    title="Context usage (prompt tokens / context window) — click for prompt budget details"
+    title={exceedsModel
+      ? "Context usage — warning: this story's context override exceeds the model's reported context length"
+      : 'Context usage (prompt tokens / context window) — click for prompt budget details'}
     onclick={onShowContext}
   >
     <i class="fa-solid fa-gauge-high opacity-60"></i>
@@ -66,7 +70,10 @@ function shortModel(m: ModelInfo): string {
         style={`width: ${contextPct}%`}
       ></div>
     </div>
-    <span class="tabular-nums opacity-60">{maxContext.toLocaleString()}</span>
+    {#if exceedsModel}
+      <i class="fa-solid fa-triangle-exclamation text-warning" title="Context override exceeds the model's reported context length"></i>
+    {/if}
+    <span class={`tabular-nums ${exceedsModel ? 'font-semibold text-warning' : 'opacity-60'}`}>{maxContext.toLocaleString()}</span>
   </button>
 
   <span class="ml-auto flex shrink-0 items-center gap-2">

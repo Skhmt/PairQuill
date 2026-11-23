@@ -62,6 +62,16 @@ export interface BuiltRequest {
   userMessage: string
 }
 
+/**
+ * The effective cap for how long one generated reply may be: the user's reply-length
+ * setting, further limited by the profile's own max tokens (when set) so a server-side
+ * limit can never be exceeded.
+ */
+export function effectiveMaxTokens(profile: ServerProfile | null, replyLength: number): number {
+  const slider = Math.max(1, Math.round(replyLength))
+  return profile && profile.params.maxTokens > 0 ? Math.min(slider, profile.params.maxTokens) : slider
+}
+
 /** Build messages for a selection-targeted operation (expand/condense/grammar/custom). */
 export function buildOpRequest(
   profile: ServerProfile,
@@ -104,8 +114,14 @@ function buildCursorRequest(
   cursorPos: number,
   maxContext: number,
   instruction?: string,
+  /** Effective reply cap (tokens) to reserve room for in the context window. */
+  maxTokens?: number,
 ): BuiltRequest {
   const systemPrompt = renderSystemPrompt(profile, doc)
+  // Reserve room for the reply we are about to generate so the story tail can never
+  // push the request past the model's context window.
+  const reserve =
+    maxTokens && maxTokens > 0 ? maxTokens : profile.params.maxTokens > 0 ? profile.params.maxTokens : 500
   const budget = computeBudget({
     maxContext,
     systemPrompt,
@@ -113,7 +129,7 @@ function buildCursorRequest(
     characterText: characterText(doc),
     toneText: doc.tone,
     storyContent: doc.content.slice(0, cursorPos),
-    reserveTokens: profile.params.maxTokens > 0 ? profile.params.maxTokens : 500,
+    reserveTokens: reserve,
   })
   const tail = storyTail(doc.content.slice(0, cursorPos), budget.fitsStoryChars)
   const guidance = instruction?.trim()
@@ -136,8 +152,9 @@ export function buildContinueRequest(
   doc: StoryDoc,
   cursorPos: number,
   maxContext: number,
+  maxTokens?: number,
 ): BuiltRequest {
-  return buildCursorRequest(profile, doc, cursorPos, maxContext)
+  return buildCursorRequest(profile, doc, cursorPos, maxContext, undefined, maxTokens)
 }
 
 /** Build messages for "instruct": continue from the cursor with custom guidance. */
@@ -147,8 +164,9 @@ export function buildInstructRequest(
   cursorPos: number,
   maxContext: number,
   instruction: string,
+  maxTokens?: number,
 ): BuiltRequest {
-  return buildCursorRequest(profile, doc, cursorPos, maxContext, instruction)
+  return buildCursorRequest(profile, doc, cursorPos, maxContext, instruction, maxTokens)
 }
 
 export function toMessages(systemPrompt: string, userMessage: string): ChatMessage[] {

@@ -61,7 +61,7 @@ try {
   // First load lets the app boot and flush its debounced save; then we clear all
   // stores and seed one profile + settings pointing at the mock server so every
   // run starts from the same clean slate (no docs, dark theme).
-  await page.goto('file:///C:/Users/Mike/Desktop/my-project/dist/index.html')
+  await page.goto('file:///' + path.join(root, 'dist', 'index.html').replace(/\\/g, '/'))
   await page.waitForSelector('footer')
   await page.waitForTimeout(1600)
   await page.evaluate(async (port) => {
@@ -193,6 +193,49 @@ try {
     !!tipCss && tipCss.top !== 'auto' && tipCss.right === '0px',
     JSON.stringify(tipCss),
   )
+
+  // ---- T2c: reply-length slider (top bar, left of the selection ops) ----------
+  const replySlider = page.locator('header input[type="range"][aria-label="Reply length"]')
+  check(
+    'T2c slider: present with a doc, default ~1 page (2^10 = 1024 tokens)',
+    (await replySlider.count()) === 1 && (await replySlider.inputValue()) === '10',
+  )
+  const sliderBox = await replySlider.boundingBox()
+  const expandBox = await page.locator('button[aria-label="Expand"]').boundingBox()
+  check(
+    'T2c slider: positioned to the left of the Expand button',
+    !!sliderBox && !!expandBox && sliderBox.x < expandBox.x,
+  )
+  await replySlider.focus()
+  await page.keyboard.press('ArrowLeft') // 1024 -> 512
+  await page.waitForTimeout(300)
+  check(
+    'T2c slider: stepping down updates the human-readable label',
+    (await replySlider.inputValue()) === '9' &&
+      (await page.locator('header').getByText('(a few paragraphs)', { exact: true }).count()) === 1,
+  )
+  const replyControl = page.locator('header label', { has: page.locator('input[type="range"][aria-label="Reply length"]') })
+  const replySpans = replyControl.locator('span')
+  const spanCount = await replySpans.count()
+  const spanTexts = []
+  for (let i = 0; i < spanCount; i++) spanTexts.push(await replySpans.nth(i).innerText())
+  check(
+    'T2c slider: shows the token count (512) before the description',
+    spanCount === 2 && spanTexts[0] === '512' && spanTexts[1] === '(a few paragraphs)',
+    `count=${spanCount} texts=${JSON.stringify(spanTexts)}`,
+  )
+  await page.keyboard.press('ArrowLeft') // 512 -> 256 ("a paragraph" — a different label width)
+  await page.waitForTimeout(300)
+  const sliderBoxAfter = await replySlider.boundingBox()
+  check(
+    'T2c slider: fixed-width label does not shift the slider while dragging',
+    !!sliderBox && !!sliderBoxAfter && sliderBox.x === sliderBoxAfter.x && sliderBox.width === sliderBoxAfter.width,
+  )
+  await page.waitForTimeout(1200) // let the debounced settings save flush
+  await page.reload()
+  await page.waitForSelector('footer')
+  await page.locator('header button:has-text("Continue")').waitFor({ timeout: 5000 })
+  check('T2c slider: choice persists after reload', (await replySlider.inputValue()) === '8')
 
   // ---- T3: Stories modal — inline rename ------------------------------------
   await ta.fill('The lighthouse keeper climbed the spiral stairs as the storm rolled in off the bay.\nShe lit the great lamp and watched the beam sweep the black water.')

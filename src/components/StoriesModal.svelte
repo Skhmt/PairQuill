@@ -33,6 +33,14 @@ $effect(() => {
 /** Double-click a title to rename it inline; Enter/blur commits, Esc cancels. */
 let editingId = $state<string | null>(null)
 let renameDraft = $state('')
+let renameInput: HTMLInputElement | undefined = $state()
+$effect(() => {
+  // Programmatic focus (Svelte 5 warns against the `autofocus` attribute).
+  if (editingId && renameInput) {
+    renameInput.focus()
+    renameInput.select()
+  }
+})
 $effect(() => {
   if (!open) {
     editingId = null
@@ -113,7 +121,7 @@ function commitRename() {
                 <input
                   class="input input-bordered input-sm w-full"
                   bind:value={renameDraft}
-                  autofocus
+                  bind:this={renameInput}
                   onkeydown={(e) => {
                     if (e.key === 'Enter') commitRename()
                     else if (e.key === 'Escape') editingId = null

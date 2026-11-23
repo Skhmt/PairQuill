@@ -70,7 +70,9 @@ export async function chatStream(
   if (typeof params.temperature === 'number' && Number.isFinite(params.temperature)) body.temperature = params.temperature
   if (typeof params.topP === 'number' && Number.isFinite(params.topP)) body.top_p = params.topP
   if (params.maxTokens > 0) body.max_tokens = params.maxTokens
-  if (params.stopSequences.length > 0) body.stop = params.stopSequences
+  // Guard: profiles saved by older app versions may lack stopSequences.
+  const stops = Array.isArray(params.stopSequences) ? params.stopSequences : []
+  if (stops.length > 0) body.stop = stops
 
   const res = await fetch(`${normalizeBaseUrl(baseUrl)}/chat/completions`, {
     method: 'POST',
