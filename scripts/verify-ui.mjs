@@ -60,7 +60,7 @@ try {
   // ---- deterministic state: wipe IndexedDB, seed a mock profile ------------
   // First load lets the app boot and flush its debounced save; then we clear all
   // stores and seed one profile + settings pointing at the mock server so every
-  // run starts from the same clean slate (no docs, dark theme).
+  // run starts from the same clean slate (no docs, abyss theme).
   await page.goto('file:///' + path.join(root, 'dist', 'index.html').replace(/\\/g, '/'))
   await page.waitForSelector('footer')
   await page.waitForTimeout(1600)
@@ -85,7 +85,7 @@ try {
       params: { temperature: 0.8, topP: 1, maxTokens: 0, stopSequences: [] },
     })
     tx.objectStore('settings').put(
-      { theme: 'dark', activeProfileId: 'mock-profile', activeDocId: null, fontSize: 'md', measure: 'normal', fontFamily: 'serif' },
+      { theme: 'abyss', activeProfileId: 'mock-profile', activeDocId: null, fontSize: 'md', measure: 'normal', fontFamily: 'serif' },
       'app',
     )
     await new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = () => rej(tx.error) })
@@ -276,21 +276,19 @@ try {
   check('T5 context: max context shown', (await ctxDlg.getByText('Max context').count()) === 1)
   await ctxDlg.locator('button[title="Close"]').click()
 
-  // ---- T6: TopBar menu — theme toggle + shortcuts ----------------------------
+  // ---- T6: TopBar menu — theme picker + shortcuts ---------------------------
   const rootDiv = page.locator('div[data-theme]')
   const before = await rootDiv.getAttribute('data-theme')
   await page.click(menuBtn)
   const menu = page.locator('[role="menu"]')
   check('T6 menu: opens with items', (await menu.count()) === 1 && (await menu.getByText(/theme/i).count()) >= 1)
-  const themeLabel = before === 'dark' ? 'Light theme' : 'Dark theme'
-  await menu.getByText(themeLabel).click()
+  const themeSelect = menu.locator('select[title="DaisyUI theme"]')
+  check('T6 theme: picker lists the 7 presets', (await themeSelect.locator('option').count()) === 7)
+  const nextTheme = ['abyss', 'dim', 'caramellatte', 'corporate', 'retro', 'silk', 'valentine'].find((t) => t !== before) ?? 'dim'
+  await themeSelect.selectOption(nextTheme)
   await page.waitForTimeout(200)
   const after = await rootDiv.getAttribute('data-theme')
-  check('T6 theme: toggles light<->dark', before !== after, `${before} -> ${after}`)
-  if (after === 'light') {
-    const bg = await page.evaluate(() => getComputedStyle(document.querySelector('div[data-theme]')).backgroundColor)
-    check('T6 theme: light is off-white base', bg === 'rgb(247, 246, 242)', bg)
-  }
+  check('T6 theme: picker switches preset', after === nextTheme, `${before} -> ${after}`)
   check('T6 menu: closed after choosing', (await page.locator('[role="menu"]').count()) === 0)
   await page.keyboard.press('F1')
   await page.waitForTimeout(200)

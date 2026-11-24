@@ -1,5 +1,6 @@
 <script lang="ts">
-import type { GenStats, OpKind } from '../lib/types'
+import { THEMES } from '../lib/types'
+import type { GenStats, OpKind, ThemeName } from '../lib/types'
 import { OP_LABELS } from '../lib/prompts'
 
 let {
@@ -11,7 +12,7 @@ let {
   fontSize,
   measure,
   fontFamily,
-  onToggleTheme,
+  onSetTheme,
   onOpenShortcuts,
   onImportFile,
   onSaveAll,
@@ -29,7 +30,7 @@ let {
   replyLength,
   onSetReplyLength,
 }: {
-  theme: 'light' | 'dark'
+  theme: ThemeName
   hasDoc: boolean
   /** Live selection state from the editor (word count for the "N words selected" hint). */
   selection: { has: boolean; words: number }
@@ -39,7 +40,7 @@ let {
   fontSize: 'sm' | 'md' | 'lg'
   measure: 'narrow' | 'normal' | 'wide'
   fontFamily: 'serif' | 'sans' | 'mono'
-  onToggleTheme: () => void
+  onSetTheme: (t: ThemeName) => void
   onOpenShortcuts: () => void
   onImportFile: (file: File) => void
   onSaveAll: () => void
@@ -97,6 +98,8 @@ const OPS: { kind: OpKind; icon: string; tip: string }[] = [
 const ITEM = 'flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-sm hover:bg-base-300 disabled:pointer-events-none disabled:opacity-40'
 /** One option of a segmented control inside a menu row (text size / line length). */
 const SEG = 'px-2 py-0.5 leading-tight'
+/** Display label for a theme id ("caramellatte" -> "Caramellatte"). */
+const themeLabel = (t: string) => t.charAt(0).toUpperCase() + t.slice(1)
 
 // ---------- reply-length slider (log scale: 2^7 … 2^14 tokens) ----------
 const REPLY_MIN_EXP = 7 // 128 tokens — a few sentences
@@ -191,13 +194,27 @@ const REPLY_TIP = 'Reply length — how long generated replies may be. A profile
             <option value="mono">Mono</option>
           </select>
         </div>
+        <div class="flex items-center justify-between gap-2 px-3 py-1.5 text-sm">
+          <span class="flex shrink-0 items-center gap-2.5">
+            <i class="fa-solid fa-palette w-4 text-center"></i>Theme
+          </span>
+          <select
+            class="select select-bordered select-sm w-auto"
+            value={theme}
+            onchange={(e) => {
+              menuOpen = false
+              onSetTheme((e.target as HTMLSelectElement).value as ThemeName)
+            }}
+            title="DaisyUI theme"
+          >
+            {#each THEMES as t}
+              <option value={t}>{themeLabel(t)}</option>
+            {/each}
+          </select>
+        </div>
 
         <div class="my-1 border-t border-base-300"></div>
 
-        <button role="menuitem" class={ITEM} onclick={() => { menuOpen = false; onToggleTheme() }}>
-          <i class="fa-solid fa-circle-half-stroke w-4 text-center"></i>
-          <span>{theme === 'dark' ? 'Light theme' : 'Dark theme'}</span>
-        </button>
         <button role="menuitem" class={ITEM} onclick={() => { menuOpen = false; onOpenShortcuts() }}>
           <i class="fa-solid fa-keyboard w-4 text-center"></i>
           <span>Keyboard shortcuts</span>

@@ -67,8 +67,12 @@ export interface GenerationRecord {
   completionTokens?: number
 }
 
+/** DaisyUI preset themes offered by the top-bar Theme picker (kept in sync with app.css). */
+export const THEMES = ['abyss', 'dim', 'caramellatte', 'corporate', 'retro', 'silk', 'valentine'] as const
+export type ThemeName = (typeof THEMES)[number]
+
 export interface AppSettings {
-  theme: 'light' | 'dark'
+  theme: ThemeName
   activeProfileId: string | null
   activeDocId: string | null
   fontSize: 'sm' | 'md' | 'lg'

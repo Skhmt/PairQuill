@@ -9,7 +9,9 @@ import type {
   OpKind,
   ServerProfile,
   StoryDoc,
+  ThemeName,
 } from './lib/types'
+import { THEMES } from './lib/types'
 import { idbDelete, idbDeleteMany, idbGetAll, idbPut, idbPutMany } from './lib/idb'
 import { downloadFile, slugify, uid, wordCount } from './lib/format'
 import { buildProjectFile, parseProjectFile, PROJECT_FORMAT } from './lib/project'
@@ -33,7 +35,7 @@ let generations = $state<GenerationRecord[]>([])
 let loaded = $state(false)
 
 let settings = $state<AppSettings>({
-  theme: 'dark',
+  theme: 'abyss',
   activeProfileId: null,
   activeDocId: null,
   fontSize: 'md',
@@ -114,7 +116,12 @@ async function loadAll() {
     docs = d.sort((a, b) => b.updatedAt - a.updatedAt)
     profiles = p
     const saved = s[0]
-    if (saved) settings = { ...settings, ...saved }
+    if (saved) {
+      settings = { ...settings, ...saved }
+      // Legacy saves may hold the old 'light'/'dark' toggle values — map them onto presets.
+      const rawTheme = settings.theme as string
+      if (!THEMES.includes(rawTheme as ThemeName)) settings.theme = rawTheme === 'light' ? 'caramellatte' : 'abyss'
+    }
     generations = g.sort((a, b) => b.ts - a.ts).slice(0, MAX_GENERATIONS)
   } catch (e) {
     showToast(`Could not load saved data: ${(e as Error).message}`, 'error')
@@ -513,7 +520,7 @@ $effect(() => {
     fontSize={settings.fontSize}
     measure={settings.measure}
     fontFamily={settings.fontFamily}
-    onToggleTheme={() => (settings.theme = settings.theme === 'dark' ? 'light' : 'dark')}
+    onSetTheme={(t) => (settings.theme = t)}
     onOpenShortcuts={() => (shortcutsOpen = true)}
     onImportFile={(f) => void importFile(f)}
     onSaveAll={exportProject}

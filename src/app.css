@@ -1,5 +1,8 @@
 @import "tailwindcss";
-@plugin "daisyui";
+@plugin "daisyui" {
+  /* Presets offered by the top-bar Theme picker (keep in sync with THEMES in lib/types.ts). */
+  themes: abyss --default, dim, caramellatte, corporate, retro, silk, valentine;
+}
 
 /* Editor typography */
 .editor-serif {
@@ -67,14 +70,4 @@
   height: 2px;
   border-radius: 1px;
   background-color: color-mix(in oklab, var(--color-primary) 75%, transparent);
-}
-
-/* ---------- warm off-white light theme -----------------------------------
- * Unlayered rule so it wins over daisyUI's layered light theme, whose default
- * base-100 is pure white. We want a softer paper tone instead (the dark theme
- * and the primary accent are untouched). */
-[data-theme='light'] {
-  --color-base-100: #f7f6f2;
-  --color-base-200: #efece6;
-  --color-base-300: #e3e0d8;
 }
