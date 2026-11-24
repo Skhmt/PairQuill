@@ -10,7 +10,7 @@ export function estimateTokens(text: string): number {
   return Math.max(Math.ceil(text.length / 4), Math.round(words * 1.3))
 }
 
-export interface ContextBudget {
+interface ContextBudget {
   max: number
   systemTokens: number
   worldTokens: number

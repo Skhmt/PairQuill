@@ -5,7 +5,7 @@ const DB_NAME = 'pairquill'
 const LEGACY_DB_NAME = 'pairui'
 const DB_VERSION = 1
 
-export type StoreName = 'documents' | 'profiles' | 'settings' | 'generations'
+type StoreName = 'documents' | 'profiles' | 'settings' | 'generations'
 
 let dbPromise: Promise<IDBDatabase> | null = null
 
@@ -136,9 +136,5 @@ export function idbGetAll<T>(store: StoreName): Promise<T[]> {
 
 export function idbDelete(store: StoreName, key: IDBValidKey): Promise<undefined> {
   return run(store, 'readwrite', (s) => s.delete(key))
-}
-
-export function idbClear(store: StoreName): Promise<undefined> {
-  return run(store, 'readwrite', (s) => s.clear())
 }
 

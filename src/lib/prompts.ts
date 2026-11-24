@@ -14,7 +14,7 @@ export const OP_LABELS: Record<OpKind, string> = {
   retry: 'Retry',
 }
 
-export const DEFAULT_SYSTEM_TEMPLATE = `You are a skilled co-writer collaborating on a story with the author. Follow the author's instructions precisely and match the established voice, tense, and style. Return only the requested text — no commentary, no preamble, no markdown fences.
+const DEFAULT_SYSTEM_TEMPLATE = `You are a skilled co-writer collaborating on a story with the author. Follow the author's instructions precisely and match the established voice, tense, and style. Return only the requested text — no commentary, no preamble, no markdown fences.
 
 World notes:
 {world_notes}

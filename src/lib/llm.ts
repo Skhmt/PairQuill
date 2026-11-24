@@ -8,14 +8,14 @@ export interface ChatMessage {
   content: string
 }
 
-export interface StreamCallbacks {
+interface StreamCallbacks {
   /** Called for each streamed content delta (already filtered to visible text). */
   onToken: (text: string) => void
   /** Some servers report usage in the final chunk. */
   onUsage?: (usage: { prompt_tokens?: number; completion_tokens?: number }) => void
 }
 
-export function normalizeBaseUrl(base: string): string {
+function normalizeBaseUrl(base: string): string {
   let u = base.trim().replace(/\/+$/, '')
   if (!u) return ''
   if (!/^https?:\/\//i.test(u)) {
@@ -50,7 +50,7 @@ export async function listModels(baseUrl: string, apiKey: string): Promise<Model
   })).filter((m) => m.id)
 }
 
-export interface StreamResult {
+interface StreamResult {
   text: string
   promptTokens?: number
   completionTokens?: number

@@ -15,8 +15,8 @@ import type {
 import { uid } from './format'
 
 export const PROJECT_FORMAT = 'pairquill-project'
-export const LEGACY_PROJECT_FORMAT = 'pairui-project'
-export const PROJECT_VERSION = 1
+const LEGACY_PROJECT_FORMAT = 'pairui-project'
+const PROJECT_VERSION = 1
 
 /** The on-disk shape of a saved project file. */
 export interface ProjectFile {
