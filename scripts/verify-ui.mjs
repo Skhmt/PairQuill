@@ -22,10 +22,12 @@ const check = (name, ok, extra = '') => { results.push({ name, ok }); step(`${ok
 const PORT = 9877
 const GENERATED = ' The wind picked up, and every lantern along the pier swung in unison.'
 let chatHits = 0
+let modelsHits = 0
 const srv = http.createServer((req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*')
   if (req.method === 'OPTIONS') { res.setHeader('Access-Control-Allow-Headers', '*'); res.end(); return }
   if ((req.url ?? '').includes('/models')) {
+    modelsHits++
     res.setHeader('Content-Type', 'application/json')
     res.end(JSON.stringify({ data: [{ id: 'llama3.1-8b-instruct', context_length: 131072, loaded: true }] }))
     return
@@ -449,6 +451,44 @@ try {
     'T11 server modal: opens with the seeded profile',
     (await dlg11.getByText('Servers & models').count()) === 1,
   )
+  // Refresh must actually fetch and report back inline (run while the seeded mock profile is active)
+  const refreshBtn = dlg11.locator('label[data-model-combo] button[title="Refresh model list only"]')
+  const hitsBefore = modelsHits
+  await refreshBtn.click()
+  const noteAppeared = await page
+    .waitForFunction(() => !!document.querySelector('label[data-model-combo] .text-success'), { timeout: 5000 })
+    .then(() => true)
+    .catch(() => false)
+  check(
+    'T11 server modal: refresh button fetches the model list',
+    modelsHits === hitsBefore + 1,
+    `hits ${hitsBefore} -> ${modelsHits}`,
+  )
+  const noteText = noteAppeared ? await dlg11.locator('label[data-model-combo] .text-success').innerText() : ''
+  check(
+    'T11 server modal: refresh shows an inline success note',
+    /model/.test(noteText),
+    JSON.stringify(noteText),
+  )
+  // With the list open it can render upward over this label row — the button must stay on top of it
+  const modelInput2 = dlg11.locator('input[placeholder="pick or type a model id"]')
+  await modelInput2.click()
+  await page.waitForTimeout(300)
+  const topAtBtn = await refreshBtn.evaluate((b) => {
+    const r = b.getBoundingClientRect()
+    const el = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)
+    return b.contains(el) ? 'button' : (el ? el.tagName : 'none')
+  })
+  check(
+    'T11 server modal: refresh stays clickable while the model list is open',
+    topAtBtn === 'button',
+    `topmost=${topAtBtn}`,
+  )
+  await page.keyboard.press('Escape') // closes only the list…
+  check(
+    'T11 server modal: Escape closes the model list but keeps the dialog open',
+    (await dlg11.getByText('Servers & models').count()) === 1,
+  )
   const presetSel = dlg11.locator('select[data-server-preset]')
   const keyLink = dlg11.locator('label:has-text("API key") a')
   check(
@@ -495,7 +535,6 @@ try {
     'T11 server modal: "Custom…" hides the API-key link',
     (await keyLink.count()) === 0,
   )
-  const refreshBtn = dlg11.locator('label[data-model-combo] button[title="Refresh model list only"]')
   check(
     'T11 server modal: refresh moved next to the Model ID label',
     (await dlg11.locator('button[title="Refresh model list only"]').count()) === 1 &&

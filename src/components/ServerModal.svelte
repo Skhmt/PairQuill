@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { ModelInfo, ServerProfile } from "../lib/types";
+  import type { ModelInfo, RefreshResult, ServerProfile } from "../lib/types";
   import { listModels } from "../lib/llm";
   import serverList from "../config/servers.json";
 
@@ -22,7 +22,7 @@
     onSelect: (id: string) => void;
     onAdd: () => void;
     onDelete: (p: ServerProfile) => void;
-    onRefreshModels: () => void;
+    onRefreshModels: () => Promise<RefreshResult>;
   } = $props();
 
   const profile = $derived(
@@ -143,6 +143,8 @@
         pickModel(m.id);
       }
     } else if (e.key === "Escape") {
+      // Prevent the default so Escape only closes the list — not the whole dialog.
+      e.preventDefault();
       modelOpen = false;
     }
   }
@@ -168,6 +170,34 @@
     if (!open) {
       modelOpen = false;
       activeIdx = -1;
+      refreshing = false;
+      refreshNote = null;
+    }
+  });
+
+  // ---- model-list refresh (inline feedback — the App-level call is silent on success) ----
+  let refreshing = $state(false);
+  /** "N models" after a successful refresh; null while idle or after a failure (App toasts that). */
+  let refreshNote = $state<string | null>(null);
+
+  async function doRefresh() {
+    if (!profile || refreshing) return;
+    const forProfile = profile.id;
+    modelOpen = false;
+    refreshing = true;
+    refreshNote = null;
+    const res = await onRefreshModels();
+    // Switching profiles mid-flight makes the result stale — drop it.
+    if (profile?.id !== forProfile) return;
+    refreshing = false;
+    refreshNote = res.ok ? `${res.count} model${res.count === 1 ? "" : "s"}` : null;
+  }
+
+  // The refresh result belongs to the profile that was active when it ran.
+  $effect(() => {
+    if (profile?.id) {
+      refreshing = false;
+      refreshNote = null;
     }
   });
 
@@ -327,16 +357,21 @@
           <!-- z-10 on the label (not an opaque/opacity-dimmed wrapper) so the z-20 dropdown
                stacks above later siblings without creating a dimming stacking context -->
           <label class="relative z-10 form-control text-xs" data-model-combo>
-            <span class="opacity-70">
-              Model ID
-              <button
-                class="ml-1.5 inline-flex items-center gap-1 font-medium text-primary hover:underline"
-                title="Refresh model list only"
-                onclick={onRefreshModels}
-              >
-                refresh<i class="fa-solid fa-rotate"></i>
-              </button>
-            </span>
+            <span class="opacity-70">Model ID</span>
+            <!-- z-30 keeps the button above the z-20 list when it opens upward over this row.
+                 It must not live inside the opacity-dimmed span: opacity < 1 creates its own
+                 stacking context, which would be painted below the dropdown no matter what. -->
+            <button
+              class="relative z-30 ml-1.5 inline-flex items-center gap-1 font-medium text-primary hover:underline disabled:pointer-events-none disabled:opacity-60"
+              title={refreshing ? "Refreshing model list…" : "Refresh model list only"}
+              disabled={refreshing}
+              onclick={() => void doRefresh()}
+            >
+              refresh<i
+                class={`fa-solid ${refreshing ? "fa-spinner fa-spin" : "fa-rotate"}`}
+              ></i>
+            </button>
+            {#if refreshNote}<span class="relative z-30 ml-1.5 text-success">{refreshNote}</span>{/if}
             <div class="relative mt-1">
               <input
                 class="input input-bordered input-sm w-full"

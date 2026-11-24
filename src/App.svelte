@@ -7,6 +7,7 @@ import type {
   GenerationRecord,
   ModelInfo,
   OpKind,
+  RefreshResult,
   ServerProfile,
   StoryDoc,
   ThemeName,
@@ -384,11 +385,11 @@ function selectDoc(id: string): boolean {
 }
 
 // ---------- server profile / model actions ----------
-async function refreshModels() {
+async function refreshModels(): Promise<RefreshResult> {
   const p = activeProfile
   if (!p || !p.baseUrl) {
-    showToast('Add a base URL to this profile first (gear icon).', 'error')
-    return
+    showToast('Add a base URL to this profile first.', 'error')
+    return { ok: false, message: 'No base URL set' }
   }
   try {
     models = await listModels(p.baseUrl, p.apiKey)
@@ -405,8 +406,11 @@ async function refreshModels() {
         p.modelId = preferred.id
       }
     }
+    return { ok: true, count: models.length }
   } catch (e) {
-    showToast(`Could not list models: ${(e as Error).message}`, 'error')
+    const msg = (e as Error).message || 'Connection failed'
+    showToast(`Could not list models: ${msg}`, 'error')
+    return { ok: false, message: msg }
   }
 }
 
@@ -618,7 +622,7 @@ $effect(() => {
     }}
     onAdd={addProfile}
     onDelete={deleteProfile}
-    onRefreshModels={() => void refreshModels()}
+    onRefreshModels={() => refreshModels()}
   />
 
   <StoriesModal

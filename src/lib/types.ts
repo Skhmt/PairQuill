@@ -37,6 +37,9 @@ export interface ModelInfo {
   loaded?: boolean
 }
 
+/** Outcome of a model-list refresh — lets callers show inline feedback (App toasts errors itself). */
+export type RefreshResult = { ok: true; count: number } | { ok: false; message: string }
+
 /** A story document with its per-document side-channel data. */
 export interface StoryDoc {
   id: string

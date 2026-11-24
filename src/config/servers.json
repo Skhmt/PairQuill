@@ -47,6 +47,10 @@
         "url": "http://localhost:3000"
     },
     {
+        "name": "Ollama",
+        "url": "http://localhost:11434"
+    },
+    {
         "name": "Kobold.cpp",
         "url": "http://localhost:5001"
     },
