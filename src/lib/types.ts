@@ -23,7 +23,7 @@ export interface SamplingParams {
 export interface ServerProfile {
   id: string
   name: string
-  /** OpenAI-compatible root, e.g. http://127.0.0.1:8888/v1 */
+  /** OpenAI-compatible API root, e.g. http://127.0.0.1:8888 (a trailing /v1 is appended if missing) */
   baseUrl: string
   apiKey: string
   modelId: string

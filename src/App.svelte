@@ -383,9 +383,18 @@ async function refreshModels() {
   }
   try {
     models = await listModels(p.baseUrl, p.apiKey)
-    if (!p.modelId && models.length > 0) {
+    // Remember the selection so it survives restarts. Prefer a model the server
+    // reports as loaded (LM Studio etc.) over an unloaded one.
+    if (models.length > 0) {
       const preferred = models.find((m) => m.loaded) ?? models[0]
-      p.modelId = preferred.id
+      if (!p.modelId) p.modelId = preferred.id
+      else if (!models.some((m) => m.id === p.modelId)) {
+        // Selection no longer exists on this server (uninstalled/renamed/removed):
+        // fall back to the preferred model instead of silently sending requests
+        // to a dead id — and re-derive context from a real model.
+        showToast(`Model "${p.modelId}" is no longer available on ${p.name}; switched to ${preferred.id}.`, 'info')
+        p.modelId = preferred.id
+      }
     }
   } catch (e) {
     showToast(`Could not list models: ${(e as Error).message}`, 'error')
@@ -658,12 +667,29 @@ $effect(() => {
   </dialog>
 
   {#if toast}
+    <!-- Long API errors (rate limits, quota…) wrap in a box instead of one line. -->
     <div
       role="status"
-      class={`fixed bottom-10 left-1/2 z-[60] -translate-x-1/2 whitespace-nowrap rounded-xl px-4 py-2 text-sm shadow-lg ${toast.kind === 'error' ? 'bg-error text-error-content' : 'bg-neutral text-neutral-content'}`}
+      class={`fixed bottom-10 left-1/2 z-[60] w-auto max-w-[min(92vw,40rem)] -translate-x-1/2 rounded-xl border px-4 py-3 text-left text-sm shadow-lg ${toast.kind === 'error' ? 'border-error/50 bg-error text-error-content' : 'border-base-300 bg-neutral text-neutral-content'}`}
     >
-      {#if toast.kind === 'error'}<i class="fa-solid fa-circle-exclamation mr-1"></i>{/if}
-      {toast.msg}
+      <div class="flex items-start gap-2">
+        {#if toast.kind === 'error'}<i class="fa-solid fa-circle-exclamation mt-0.5 shrink-0"></i>{/if}
+        <span class="min-w-0 flex-1 whitespace-pre-wrap break-words">{toast.msg}</span>
+        <button
+          type="button"
+          class="-mr-1 -mt-1 h-6 w-6 shrink-0 rounded p-0 opacity-70 hover:opacity-100"
+          title="Dismiss"
+          onclick={() => {
+            toast = null
+            if (toastTimer) {
+              clearTimeout(toastTimer)
+              toastTimer = null
+            }
+          }}
+        >
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
     </div>
   {/if}
 </div>

@@ -21,6 +21,9 @@ export function normalizeBaseUrl(base: string): string {
   if (!/^https?:\/\//i.test(u)) {
     u = `http://${u}`
   }
+  // The Base URL field implies a /v1 root (the input shows a "/v1" suffix), but
+  // tolerate URLs that already include it.
+  if (!u.toLowerCase().endsWith('/v1')) u += '/v1'
   return u
 }
 
@@ -83,7 +86,9 @@ export async function chatStream(
   })
 
   if (!res.ok || !res.body) {
-    throw new Error(`HTTP ${res.status}: ${(await safeText(res)).slice(0, 300)}`)
+    // Keep a generous slice of the server's error body — rate-limit and quota
+    // messages are long, and the UI now shows them in a wrapping box.
+    throw new Error(`HTTP ${res.status}: ${(await safeText(res)).slice(0, 1000)}`)
   }
 
   const reader = res.body.getReader()

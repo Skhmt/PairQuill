@@ -151,19 +151,33 @@ function updateSelection() {
  * with identical typography. One overlay rect per line fragment the range spans;
  * the overlay lives inside the scroll container, so it scrolls with the text for free.
  */
-function computeHighlight(content: string, range: { start: number; end: number }) {
+function computeHighlight(range: { start: number; end: number }) {
   const el = textareaEl
   const m = hlMirrorEl
   if (!el || !m) return
+  // Measure against the textarea's *actual* rendered text (its value is what the
+  // browser laid out), clamped to its length — a stale `content` closure would shift
+  // every rect and can make the highlight vanish.
+  const text = el.value
+  const start = Math.max(0, Math.min(range.start, text.length))
+  const end = Math.max(start, Math.min(range.end, text.length))
+  if (end - start <= 0) {
+    hlRects = []
+    return
+  }
   const cs = getComputedStyle(el)
-  m.style.width = `${el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight)}px`
+  const padL = parseFloat(cs.paddingLeft) || 0
+  const padT = parseFloat(cs.paddingTop) || 0
+  const width = el.clientWidth - padL - (parseFloat(cs.paddingRight) || 0)
+  if (width <= 0) return // pane hidden — nothing to project
+  m.style.width = `${width}px`
   m.textContent = ''
   const startMarker = document.createElement('span')
   const endMarker = document.createElement('span')
   m.append(
-    document.createTextNode(content.slice(0, range.start)),
+    document.createTextNode(text.slice(0, start)),
     startMarker,
-    document.createTextNode(content.slice(range.start, range.end)),
+    document.createTextNode(text.slice(start, end)),
     endMarker,
   )
   const r = document.createRange()
@@ -171,11 +185,13 @@ function computeHighlight(content: string, range: { start: number; end: number }
   r.setEnd(endMarker, 0)
   const mr = m.getBoundingClientRect()
   const lineH = parseFloat(cs.lineHeight) || 24
+  // The mirror has no padding; the textarea's text starts padL/padT inside its box.
+  // Zero-height rects (empty lines) get the line height so they stay visible.
   hlRects = Array.from(r.getClientRects())
     .filter((rc) => rc.width > 0.5)
     .map((rc) => ({
-      left: Math.max(0, rc.left - mr.left),
-      top: Math.max(0, rc.top - mr.top),
+      left: Math.max(0, rc.left - mr.left + padL),
+      top: Math.max(0, rc.top - mr.top + padT),
       width: rc.width,
       height: rc.height >= 4 ? rc.height : lineH,
     }))
@@ -184,7 +200,7 @@ function computeHighlight(content: string, range: { start: number; end: number }
 // Re-project the highlight whenever the text or its layout can move.
 $effect(() => {
   const range = newRange
-  const content = doc.content
+  void doc.content // content changes re-project (no-op while a generation is running)
   void fontSize
   void fontFamily
   void measure
@@ -192,7 +208,7 @@ $effect(() => {
     hlRects = []
     return
   }
-  const t = requestAnimationFrame(() => computeHighlight(content, range))
+  const t = requestAnimationFrame(() => computeHighlight(range))
   return () => cancelAnimationFrame(t)
 })
 
@@ -227,6 +243,11 @@ function fitEditor() {
   const el = textareaEl
   const sc = scrollEl
   if (!el || !sc) return
+  // The textarea keeps overflow:hidden (see its class), so the measured height below is
+  // always the *true* text height at full width. If it could show its own scrollbar,
+  // the box would be ~15px narrower, wrap extra lines, and bake phantom blank space
+  // into the explicit height on long stories (which then persists — scrollHeight never
+  // shrinks). The outer div is the only scroller.
   requestAnimationFrame(() => {
     // Resetting the height collapses the box and clamps scroll positions to zero. The
     // visible scroller is usually the outer container (the textarea itself only grows),
@@ -449,12 +470,13 @@ async function runOp(op: OpKind, customInstruction?: string) {
     <div class={`mx-auto min-h-full px-6 pt-8 pb-1 ${measureClass}`}>
       <!-- relative wrapper == textarea box, so mirror-measured rects map 1:1 onto the overlay -->
       <div class="relative">
-        {#each hlRects as r (r.top + ',' + r.left)}
-          <span class="gen-new" style={`left: ${r.left}px; top: ${r.top}px; width: ${r.width}px; height: ${r.height}px`}></span>
+        {#each hlRects as r, i (`${i}:${r.top},${r.left}`)}
+          <!-- Underline bar along the bottom of each line fragment the new text spans. -->
+          <span class="gen-new" style={`left: ${r.left}px; top: ${r.top + r.height - 2}px; width: ${r.width}px`}></span>
         {/each}
         <textarea
           bind:this={textareaEl}
-          class={`${familyClass} w-full resize-none bg-transparent leading-relaxed outline-none placeholder:opacity-40 ${fontClass}`}
+          class={`${familyClass} w-full resize-none overflow-hidden bg-transparent leading-relaxed outline-none placeholder:opacity-40 ${fontClass}`}
           placeholder="Start writing… or select a passage to transform it."
           value={doc.content}
           readonly={!!gen}
@@ -473,7 +495,7 @@ async function runOp(op: OpKind, customInstruction?: string) {
     bind:this={hlMirrorEl}
     aria-hidden="true"
     class={`${familyClass} leading-relaxed ${fontClass}`}
-    style="position: absolute; top: 0; left: -9999px; visibility: hidden; white-space: pre-wrap; word-break: break-word;"
+    style="position: absolute; top: 0; left: -9999px; visibility: hidden; white-space: pre-wrap; overflow-wrap: break-word;"
   ></div>
 
   <!-- Custom-instruction dialog -->

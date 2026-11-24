@@ -96,7 +96,7 @@ node scripts/verify-ui.mjs
 
 ## Connecting an LLM Server
 
-PairQuill communicates with any server exposing an OpenAI-compatible `/v1/chat/completions` endpoint.
+PairQuill communicates with any server exposing an OpenAI-compatible `/v1/chat/completions` endpoint. Enter the API root — a trailing `/v1` is appended automatically when it's missing, so both `http://127.0.0.1:8888` and `http://127.0.0.1:8888/v1` work.
 
 To configure a server, click the **gear icon** in the status bar (bottom right) or select a profile:
 

@@ -58,12 +58,15 @@
   transform: none;
 }
 
-/* ---------- highlight for freshly generated LLM text ---------- */
+/* ---------- underline for freshly generated LLM text ----------------------
+ * A 2px bar along the bottom of each line fragment the new range spans (the
+ * rects come from the mirror measurement in EditorPane). */
 .gen-new {
   position: absolute;
   pointer-events: none;
-  background-color: color-mix(in oklab, var(--color-primary) 25%, transparent);
-  border-radius: 2px;
+  height: 2px;
+  border-radius: 1px;
+  background-color: color-mix(in oklab, var(--color-primary) 75%, transparent);
 }
 
 /* ---------- warm off-white light theme -----------------------------------

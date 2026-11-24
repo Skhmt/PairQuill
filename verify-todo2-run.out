@@ -1,0 +1,46 @@
+PASS  B1 startup: empty saved model auto-selected to preferred (loaded) story-llama-70b
+PASS  B2 context display shows selected model metadata (131,072) — — | 131,072
+PASS  D1a dropdown opens on input focus
+PASS  D1b large list capped at 50 rows — rows=50
+PASS  D1c "Showing first 50 of 80 — keep typing" footer visible — matching divs=1
+PASS  D2a row badge: story-llama-70b → 131k
+PASS  D2b row badge: tiny-model-1b → 8k
+PASS  D2c row badge: filler-model-05 → 33k
+PASS  D3a wheel scroll actually scrolled the list — scrollTop 0 → 400
+PASS  D3b dropdown still open after wheel scroll
+PASS  D4 dropdown still open after scrollbar-edge drag
+PASS  D5 dropdown closes on outside pointerdown
+PASS  D6a filter narrows to 1 row — rows=1
+PASS  D6b ArrowDown highlights the row
+PASS  D6c Enter selects tiny-model-1b and closes dropdown
+PASS  B3 model select + context display update to tiny-model-1b (8,192) — select=tiny-model-1b ctx=80 | 8,192
+PASS  D7a row click selects story-llama-70b
+PASS  D7b dropdown closed after row click
+PASS  B4 context display updates back to 131,072
+PASS  D8a dropdown reopens on focus
+PASS  D8b Escape closes the dropdown and the modal (native showModal behavior)
+PASS  D9a footer select switches model (ctx → 4,096) — 80 | 4,096
+PASS  D9b restore story-llama-70b (ctx → 131,072) — 80 | 131,072
+PASS  D10a modal reopens
+PASS  D10b Done button closes the modal
+PASS  U1 underline aligned right after generation (independent probe) — 6 bars, max offset 0.00px
+PASS  U2 underline still aligned after scrolling — 6 bars, max offset 0.00px
+PASS  U3 underline still aligned after font-size change to Large — 6 bars, max offset 0.00px
+PASS  U4 manual edit clears generated-text highlight (no stale bars)
+PASS  E1a error toast shows the HTTP error text
+PASS  E1b long error is truncated (~1000 char slice, sentinel cut off) — toast length=1010
+PASS  E2 long error wraps inside the toast box (no horizontal overflow) — h=266px scrollWidth=638 clientWidth=638
+PASS  E3 error toast dismissible
+PASS  P1 model selection survives a restart (filler-model-10 kept)
+PASS  P2 context display reflects the persisted model (32,768)
+PASS  F1 info toast explains the fallback — Model "filler-model-10" is no longer available on Mock; switched to tiny-model-1b.
+PASS  F2 model select now shows the preferred loaded model
+PASS  B5 context display updates after fallback (8,192)
+PASS  L1a textarea overflow-y is hidden (no internal scrollbar)
+PASS  L1b no phantom scroll inside the textarea — scrollHeight=3718 clientHeight=3718
+PASS  L1c outer container scrolls instead — scroller scrollHeight=3760 clientHeight=819
+PASS  L2 generated-text highlight on a long doc reaches the text end (≥3 line bars, no trailing gap) — bars=6 last-bar→text-bottom gap=4px
+PASS  no page errors
+
+43/43 checks passed
+ALL CHECKS PASSED
