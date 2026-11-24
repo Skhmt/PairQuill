@@ -98,36 +98,7 @@ node scripts/verify-ui.mjs
 
 PairQuill communicates with any server exposing an OpenAI-compatible `/v1/chat/completions` endpoint. Enter the API root — a trailing `/v1` is appended automatically when it's missing, so both `http://127.0.0.1:8888` and `http://127.0.0.1:8888/v1` work.
 
-To configure a server, click the **gear icon** in the status bar (bottom right) or select a profile:
-
-### Common Local Endpoints
-
-* **KoboldCPP**:
-  * Base URL: `http://127.0.0.1:5001/v1/`
-  * API Key: *(leave empty)*
-* **Ollama**:
-  * Base URL: `http://127.0.0.1:11434/v1`
-  * API Key: *(leave empty)*
-* **LM Studio**:
-  * Base URL: `http://127.0.0.1:1234/v1`
-  * API Key: *(leave empty)*
-* **llama.cpp server**:
-  * Base URL: `http://127.0.0.1:8080/v1`
-  * API Key: *(leave empty)*
-* **Unsloth Desktop**:
-  * Base URL: `http://127.0.0.1:8888/v1`
-  * API Key: *(optional / as configured)*
-* **vLLM / LocalAI**:
-  * Base URL: `http://127.0.0.1:8000/v1`
-  * API Key: *(optional / as configured)*
-
-### Cloud Providers
-
-* **OpenRouter**:
-  * Base URL: `https://openrouter.ai/api/v1`
-  * API Key: `sk-or-v1-...`
-* **OpenAI / Groq / Mistral**:
-  * Enter provider base URL (e.g. `https://api.openai.com/v1`) and API key.
+To configure a server, click the **gear icon** in the status bar (bottom right) or select a profile.
 
 Click **Test connection** to verify connectivity and automatically populate the model dropdown.
 
@@ -144,7 +115,7 @@ Click **Test connection** to verify connectivity and automatically populate the 
   * `settings`: Theme preferences, typography, line measure, active story, and active profile.
   * `generations`: History of prompt inputs, outputs, and token counts.
 * **Portability**:
-  * **Project Files** (`pairquill-project-YYYY-MM-DD.json`): Complete JSON backups containing all documents, world data, server profiles, and generation records. Backward-compatible with earlier `pairui-project` exports.
+  * **Project Files** (`pairquill-project-YYYY-MM-DD.json`): Complete JSON backups containing all documents, world data, server profiles, and generation records.
   * **Plain Text**: Standard `.txt` import and export for external editing or manuscript submission.
 
 ---
