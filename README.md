@@ -45,7 +45,7 @@ Designed for hands-on-keyboard writing sessions:
 
 ### Prerequisites
 
-* [Node.js](https://nodejs.org/) (v18 or higher recommended)
+* [Node.js](https://nodejs.org/) (v20.19+ or v22.12+ — required by Vite 8)
 * [npm](https://www.npmjs.com/) (bundled with Node.js)
 
 ### Installation
@@ -53,7 +53,7 @@ Designed for hands-on-keyboard writing sessions:
 Clone the repository and install dependencies:
 
 ```bash
-git clone https://github.com/your-username/pairquill.git
+git clone https://github.com/skhmt/pairquill.git
 cd pairquill
 npm install
 ```
@@ -86,7 +86,7 @@ Run Svelte and TypeScript checks:
 npm run check
 ```
 
-Run the automated end-to-end UI verification suite (requires Microsoft Edge / Chromium):
+Run the automated end-to-end UI verification suite (requires [Microsoft Edge](https://www.microsoft.com/edge), launched via Playwright):
 
 ```bash
 node scripts/verify-ui.mjs
