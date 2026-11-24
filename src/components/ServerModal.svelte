@@ -30,7 +30,11 @@
   );
 
   /** Common endpoints offered as one-click base-URL presets (manual entry always works too). */
-  const PRESET_SERVERS = serverList;
+  const PRESET_SERVERS = serverList as {
+    name: string;
+    url: string;
+    api?: string;
+  }[];
 
   /** The preset matching the current base URL — "" means a custom/manual URL. */
   const presetUrl = $derived(
@@ -39,7 +43,19 @@
       : "",
   );
 
+  /** The selected preset's API-key page, if it has one — "" for local/custom servers. */
+  const presetApi = $derived(
+    PRESET_SERVERS.find((p) => p.url === presetUrl)?.api ?? "",
+  );
+
   function pickPreset(url: string) {
+    if (!url) {
+      // "Custom…" behaves as if no preset were selected (no API-key page either),
+      // so start from a clean slate instead of the previous preset's values.
+      setField("baseUrl", "");
+      setField("modelId", "");
+      return;
+    }
     const p = PRESET_SERVERS.find((x) => x.url === url);
     if (!p) return;
     setField("name", p.name);
@@ -289,8 +305,16 @@
               <span>/v1</span>
             </div>
           </label>
-          <label class="form-control text-xs opacity-70"
-            >API key (optional)
+          <label class="form-control text-xs opacity-70">
+            API key {#if presetApi}<a
+                class="ml-1.5 inline-flex items-center gap-1 font-medium text-primary hover:underline"
+                href={presetApi}
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Open the provider's API-key page in a new window"
+              >
+                get a key<i class="fa-solid fa-arrow-up-right-from-square"></i>
+              </a>{:else}(optional){/if}
             <input
               type="password"
               class="input input-bordered input-sm mt-1"
@@ -303,7 +327,16 @@
           <!-- z-10 on the label (not an opaque/opacity-dimmed wrapper) so the z-20 dropdown
                stacks above later siblings without creating a dimming stacking context -->
           <label class="relative z-10 form-control text-xs" data-model-combo>
-            <span class="opacity-70">Model ID</span>
+            <span class="opacity-70">
+              Model ID
+              <button
+                class="ml-1.5 inline-flex items-center gap-1 font-medium text-primary hover:underline"
+                title="Refresh model list only"
+                onclick={onRefreshModels}
+              >
+                refresh<i class="fa-solid fa-rotate"></i>
+              </button>
+            </span>
             <div class="relative mt-1">
               <input
                 class="input input-bordered input-sm w-full"
@@ -414,13 +447,6 @@
             {#if test.status === "busy"}<i class="fa-solid fa-spinner fa-spin"
               ></i>{:else}<i class="fa-solid fa-plug-circle-check"></i>{/if}
             Test connection
-          </button>
-          <button
-            class="btn btn-ghost btn-sm"
-            title="Refresh model list only"
-            onclick={onRefreshModels}
-          >
-            <i class="fa-solid fa-rotate"></i> Refresh models
           </button>
           {#if test.status === "ok"}<span class="text-xs text-success"
               ><i class="fa-solid fa-check mr-1"></i>{test.message}</span

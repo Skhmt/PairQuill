@@ -442,6 +442,67 @@ try {
   const stAfter = await scroller.evaluate((el) => el.scrollTop)
   check('T10 editor: typing does not jump the scroll position', Math.abs(stAfter - stBefore) <= 3, `${stBefore} -> ${stAfter}`)
 
+  // ---- T11: Servers & models — API-key link follows the selected preset --------
+  await page.locator('footer button[title="Server & model settings"]').click()
+  const dlg11 = page.locator('dialog[open]')
+  check(
+    'T11 server modal: opens with the seeded profile',
+    (await dlg11.getByText('Servers & models').count()) === 1,
+  )
+  const presetSel = dlg11.locator('select[data-server-preset]')
+  const keyLink = dlg11.locator('label:has-text("API key") a')
+  check(
+    'T11 server modal: no API-key link for a custom base URL',
+    (await presetSel.inputValue()) === '' && (await keyLink.count()) === 0,
+    `preset=${JSON.stringify(await presetSel.inputValue())}`,
+  )
+  await presetSel.selectOption({ label: 'OpenRouter' })
+  check(
+    'T11 server modal: link appears next to "API key" for a preset with an api page',
+    (await keyLink.count()) === 1 && (await keyLink.innerText()).includes('get a key'),
+  )
+  const linkAttrs = await keyLink.evaluate((a) => ({
+    href: a.getAttribute('href'),
+    target: a.getAttribute('target'),
+    rel: a.getAttribute('rel'),
+  }))
+  check(
+    'T11 server modal: link points at the preset api page, opens in a new window',
+    linkAttrs.href === 'https://openrouter.ai/workspaces/default/keys' &&
+      linkAttrs.target === '_blank' &&
+      (linkAttrs.rel ?? '').includes('noopener'),
+    JSON.stringify(linkAttrs),
+  )
+  await presetSel.selectOption({ label: 'LM Studio' })
+  check(
+    'T11 server modal: link hidden again for a local preset without an api page',
+    (await keyLink.count()) === 0,
+  )
+  const urlInput = dlg11.locator('input[placeholder="http://127.0.0.1:8888"]')
+  const modelInput = dlg11.locator('input[placeholder="pick or type a model id"]')
+  check(
+    'T11 server modal: preset selection filled the URL and model boxes',
+    (await urlInput.inputValue()) === 'http://localhost:3000' && (await modelInput.inputValue()) !== '',
+    `url=${JSON.stringify(await urlInput.inputValue())} model=${JSON.stringify(await modelInput.inputValue())}`,
+  )
+  await presetSel.selectOption({ label: 'Custom…' })
+  check(
+    'T11 server modal: "Custom…" clears the URL and model boxes',
+    (await urlInput.inputValue()) === '' && (await modelInput.inputValue()) === '',
+    `url=${JSON.stringify(await urlInput.inputValue())} model=${JSON.stringify(await modelInput.inputValue())}`,
+  )
+  check(
+    'T11 server modal: "Custom…" hides the API-key link',
+    (await keyLink.count()) === 0,
+  )
+  const refreshBtn = dlg11.locator('label[data-model-combo] button[title="Refresh model list only"]')
+  check(
+    'T11 server modal: refresh moved next to the Model ID label',
+    (await dlg11.locator('button[title="Refresh model list only"]').count()) === 1 &&
+      (await refreshBtn.count()) === 1,
+  )
+  await page.keyboard.press('Escape') // close the dialog
+
   // ---- summary -----------------------------------------------------------------
   check('no page errors during run', pageErrors.length === 0, pageErrors.join(' | ').slice(0, 200))
   const failed = results.filter((r) => !r.ok)

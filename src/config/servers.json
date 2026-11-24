@@ -1,19 +1,42 @@
 [
     {
+        "name": "AI Horde",
+        "url": "https://oai.aihorde.net/v1"
+    },
+    {
+        "name": "Claude",
+        "url": "https://api.anthropic.com/v1/",
+        "api": "https://platform.claude.com/dashboard"
+    },
+    {
         "name": "Featherless",
-        "url": "https://api.featherless.ai"
+        "url": "https://api.featherless.ai",
+        "api": "https://featherless.ai/account/api-keys"
+    },
+    {
+        "name": "Gemini",
+        "url": "https://generativelanguage.googleapis.com/v1beta/openai/",
+        "api": "https://aistudio.google.com/api-keys"
     },
     {
         "name": "NanoGPT",
-        "url": "https://api.nano-gpt.com/api"
+        "url": "https://api.nano-gpt.com/api",
+        "api": "https://nano-gpt.com/api"
+    },
+    {
+        "name": "OpenAI",
+        "url": "https://api.openai.com",
+        "api": "https://platform.openai.com/home"
     },
     {
         "name": "Openference",
-        "url": "https://api.openference.com"
+        "url": "https://api.openference.com",
+        "api": "https://openference.com/user/tokens"
     },
     {
         "name": "OpenRouter",
-        "url": "https://openrouter.ai/api"
+        "url": "https://openrouter.ai/api",
+        "api": "https://openrouter.ai/workspaces/default/keys"
     },
     {
         "name": "Llama.cpp",
