@@ -296,6 +296,20 @@ try {
   await page.keyboard.press('F1')
   await page.waitForTimeout(200)
 
+  // ---- T6b: About menu item ---------------------------------------------------
+  const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
+  await page.click(menuBtn)
+  await page.waitForTimeout(150)
+  check('T6 about: menu shows About item', (await page.locator('[role="menu"] button:has-text("About PairQuill")').count()) === 1)
+  await page.click('[role="menu"] button:has-text("About PairQuill")')
+  await page.waitForTimeout(200)
+  const aboutDlg = page.locator('dialog[open]').filter({ hasText: 'PairQuill' })
+  check('T6 about: dialog shows version from package.json', (await aboutDlg.getByText(`Version ${pkg.version}`).count()) === 1)
+  check('T6 about: dialog shows license from package.json', (await aboutDlg.getByText(`License: ${pkg.license}`).count()) === 1)
+  check('T6 about: GitHub link present', (await aboutDlg.locator('a[href="https://github.com/skhmt/pairquill"]').count()) === 1)
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(200)
+
   // ---- T7: generation — Continue streams into the editor ---------------------
   const contBtn = page.locator('header button:has-text("Continue")')
   check('T7 gen: continue enabled with doc', !(await contBtn.isDisabled()))

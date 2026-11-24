@@ -27,6 +27,7 @@ import ServerModal from './components/ServerModal.svelte'
 import StoriesModal from './components/StoriesModal.svelte'
 import WorldModal from './components/WorldModal.svelte'
 import ContextModal from './components/ContextModal.svelte'
+import AboutModal from './components/AboutModal.svelte'
 
 // ---------- persisted state (loaded from / saved to IndexedDB) ----------
 let docs = $state<StoryDoc[]>([])
@@ -50,6 +51,7 @@ let storiesOpen = $state(false)
 let worldOpen = $state(false)
 let contextOpen = $state(false)
 let shortcutsOpen = $state(false)
+let aboutOpen = $state(false)
 let serversOpen = $state(false)
 let genStats = $state<GenStats>({ active: false, promptTokens: 0, completionTokens: 0 })
 /** Live selection state from the editor (top bar hint + op button states). */
@@ -522,6 +524,7 @@ $effect(() => {
     fontFamily={settings.fontFamily}
     onSetTheme={(t) => (settings.theme = t)}
     onOpenShortcuts={() => (shortcutsOpen = true)}
+    onOpenAbout={() => (aboutOpen = true)}
     onImportFile={(f) => void importFile(f)}
     onSaveAll={exportProject}
     onSaveCurrent={saveCurrentStory}
@@ -602,6 +605,7 @@ $effect(() => {
   />
 
   <ShortcutsModal open={shortcutsOpen} onClose={() => (shortcutsOpen = false)} />
+  <AboutModal open={aboutOpen} onClose={() => (aboutOpen = false)} />
   <ServerModal
     open={serversOpen}
     onClose={() => (serversOpen = false)}

@@ -14,6 +14,7 @@ let {
   fontFamily,
   onSetTheme,
   onOpenShortcuts,
+  onOpenAbout,
   onImportFile,
   onSaveAll,
   onSaveCurrent,
@@ -42,6 +43,8 @@ let {
   fontFamily: 'serif' | 'sans' | 'mono'
   onSetTheme: (t: ThemeName) => void
   onOpenShortcuts: () => void
+  /** Open the About dialog (version + GitHub link). */
+  onOpenAbout: () => void
   onImportFile: (file: File) => void
   onSaveAll: () => void
   /** Save the current story as a single-story .json project file. */
@@ -237,6 +240,12 @@ const REPLY_TIP = 'Reply length — how long generated replies may be. A profile
         <button role="menuitem" class={ITEM} disabled={!hasDoc} onclick={() => { menuOpen = false; onExportTxt() }}>
           <i class="fa-solid fa-file-export w-4 text-center"></i>
           <span>Export current story (.txt)</span>
+        </button>
+
+        <div class="my-1 border-t border-base-300"></div>
+        <button role="menuitem" class={ITEM} onclick={() => { menuOpen = false; onOpenAbout() }}>
+          <i class="fa-solid fa-circle-info w-4 text-center"></i>
+          <span>About PairQuill</span>
         </button>
       </div>
     {/if}
