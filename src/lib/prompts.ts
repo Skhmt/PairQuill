@@ -72,6 +72,22 @@ export function effectiveMaxTokens(profile: ServerProfile | null, replyLength: n
   return profile && profile.params.maxTokens > 0 ? Math.min(slider, profile.params.maxTokens) : slider
 }
 
+/** Above this cap the limit rarely matters in practice, so no hint is added. */
+const LENGTH_HINT_MAX_TOKENS = 2048
+
+/**
+ * Soft length guidance for the prompt body. max_tokens is a hard stop that can cut a
+ * reply off mid-sentence, so when the effective cap is small enough to actually bite we
+ * tell the model to aim for roughly that length and end on a natural break instead.
+ */
+function lengthHint(tokens: number): string {
+  if (!Number.isFinite(tokens) || tokens <= 0 || tokens > LENGTH_HINT_MAX_TOKENS) return ''
+  // ~1.33 tokens per word of English prose; floor to a clean multiple of 25 so the
+  // hinted word count stays safely under the hard cap.
+  const words = Math.max(25, Math.floor((tokens * 0.75) / 25) * 25)
+  return ` Keep your reply to about ${words} words or fewer, and end at a natural sentence or paragraph break.`
+}
+
 /** Build messages for a selection-targeted operation (expand/condense/grammar/custom). */
 export function buildOpRequest(
   profile: ServerProfile,
@@ -114,14 +130,16 @@ function buildCursorRequest(
   cursorPos: number,
   maxContext: number,
   instruction?: string,
-  /** Effective reply cap (tokens) to reserve room for in the context window. */
+  /** Effective reply cap (tokens): reserves context-window room and drives the soft length hint. */
   maxTokens?: number,
 ): BuiltRequest {
   const systemPrompt = renderSystemPrompt(profile, doc)
+  // The hard cap that will actually be sent as max_tokens (slider ∩ profile limit).
+  // When neither is set the server decides, so no length hint is added.
+  const cap =
+    maxTokens && maxTokens > 0 ? maxTokens : profile.params.maxTokens > 0 ? profile.params.maxTokens : 0
   // Reserve room for the reply we are about to generate so the story tail can never
   // push the request past the model's context window.
-  const reserve =
-    maxTokens && maxTokens > 0 ? maxTokens : profile.params.maxTokens > 0 ? profile.params.maxTokens : 500
   const budget = computeBudget({
     maxContext,
     systemPrompt,
@@ -129,7 +147,7 @@ function buildCursorRequest(
     characterText: characterText(doc),
     toneText: doc.tone,
     storyContent: doc.content.slice(0, cursorPos),
-    reserveTokens: reserve,
+    reserveTokens: cap > 0 ? cap : 500,
   })
   const tail = storyTail(doc.content.slice(0, cursorPos), budget.fitsStoryChars)
   const guidance = instruction?.trim()
@@ -141,7 +159,7 @@ function buildCursorRequest(
 ${tail.trim() || '(this is the very beginning of the story — start it now)'}
 """
 
-Continue the story from exactly where it left off.${guidance} Write only new text that follows naturally — do not repeat or summarize anything already written. Match the established voice and tense. Return ONLY the continuation as plain text.`
+Continue the story from exactly where it left off.${guidance} Write only new text that follows naturally — do not repeat or summarize anything already written. Match the established voice and tense.${lengthHint(cap)} Return ONLY the continuation as plain text.`
 
   return { systemPrompt, userMessage }
 }
