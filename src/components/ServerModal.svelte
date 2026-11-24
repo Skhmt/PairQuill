@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { ModelInfo, ServerProfile } from "../lib/types";
   import { listModels } from "../lib/llm";
+  import serverList from "../config/servers.json";
 
   let {
     open,
@@ -27,6 +28,23 @@
   const profile = $derived(
     profiles.find((p) => p.id === activeProfileId) ?? null,
   );
+
+  /** Common endpoints offered as one-click base-URL presets (manual entry always works too). */
+  const PRESET_SERVERS = serverList;
+
+  /** The preset matching the current base URL — "" means a custom/manual URL. */
+  const presetUrl = $derived(
+    profile?.baseUrl
+      ? (PRESET_SERVERS.find((p) => p.url === profile.baseUrl)?.url ?? "")
+      : "",
+  );
+
+  function pickPreset(url: string) {
+    const p = PRESET_SERVERS.find((x) => x.url === url);
+    if (!p) return;
+    setField("name", p.name);
+    setField("baseUrl", p.url);
+  }
 
   let modelOpen = $state(false);
   /**
@@ -229,16 +247,9 @@
       {/each}
     </div>
     <div class="rounded-xl border border-base-300 bg-base-200/50 p-3">
-      <div class="mb-2 flex items-center justify-between">
-        <h4 class="text-sm font-semibold">
-          {profile ? `Editing: ${profile.name}` : "New profile"}
-        </h4>
-        <button
-          class="btn btn-ghost btn-xs"
-          title="Create a new profile"
-          onclick={onAdd}><i class="fa-solid fa-plus"></i></button
-        >
-      </div>
+      <h4 class="mb-2 text-sm font-semibold">
+        {profile ? `Editing: ${profile.name}` : "New profile"}
+      </h4>
 
       {#if profile}
         <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -254,6 +265,19 @@
           </label>
           <label class="form-control text-xs opacity-70"
             >Base URL
+            <select
+              class="select select-bordered select-sm mt-1"
+              data-server-preset
+              title="Pre-fill the name and base URL from a common endpoint (or type your own below)"
+              value={presetUrl}
+              onchange={(e) =>
+                pickPreset((e.target as HTMLSelectElement).value)}
+            >
+              <option value="">Custom…</option>
+              {#each PRESET_SERVERS as p (p.url)}
+                <option value={p.url}>{p.name}</option>
+              {/each}
+            </select>
             <div class="input input-bordered input-sm mt-1">
               <input
                 class="grow"
@@ -410,13 +434,15 @@
         </div>
       {:else}
         <p class="py-2 text-center text-xs opacity-50">
-          Create a profile to get started.
+          No profile selected — click “New” below to add one.
         </p>
       {/if}
     </div>
 
     <div class="modal-action">
-      <button class="btn" onclick={onClose}>Done</button>
+      <button class="btn" title="Create a new profile" onclick={onAdd}>
+        <i class="fa-solid fa-plus mr-2"></i>New
+      </button>
     </div>
   </div>
   <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->

@@ -1,0 +1,34 @@
+[
+    {
+        "name": "Featherless",
+        "url": "https://api.featherless.ai"
+    },
+    {
+        "name": "NanoGPT",
+        "url": "https://api.nano-gpt.com/api"
+    },
+    {
+        "name": "Openference",
+        "url": "https://api.openference.com"
+    },
+    {
+        "name": "OpenRouter",
+        "url": "https://openrouter.ai/api"
+    },
+    {
+        "name": "Llama.cpp",
+        "url": "http://localhost:9931"
+    },
+    {
+        "name": "LM Studio",
+        "url": "http://localhost:3000"
+    },
+    {
+        "name": "Kobold.cpp",
+        "url": "http://localhost:5001"
+    },
+    {
+        "name": "Unsloth Desktop",
+        "url": "http://localhost:8888"
+    }
+]

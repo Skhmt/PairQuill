@@ -334,13 +334,65 @@ try {
   await modelSelect.selectOption('story-llama-70b')
   check('D9b restore story-llama-70b (ctx → 131,072)', (await ctxShown()).includes('131,072'), (await ctxShown()).replace(/\n/g, ' | '))
 
-  // D10: the modal can be reopened and closed via Done
+  // D10: the modal can be reopened; footer now offers "New" (not "Done") — close via X
   await page.click('footer button[title="Server & model settings"]')
   await page.waitForTimeout(250)
   check('D10a modal reopens', await dlgIsOpen())
-  await dlg.locator('.modal-action').getByRole('button', { name: 'Done' }).click()
+
+  // ---- N: footer "New" replaces "Done"; preset dropdown pre-populates the base URL --
+  const presetSel = dlg.locator('select[data-server-preset]')
+  const urlInput = dlg.locator('label:has-text("Base URL") .input input')
+  const nameInput = dlg.locator('label:has-text("Name") input')
+  check(
+    'N1a footer has a New button and no Done',
+    (await dlg.locator('.modal-action button[title="Create a new profile"]').count()) === 1 &&
+      (await dlg.locator('.modal-action').getByRole('button', { name: 'Done' }).count()) === 0,
+  )
+  const presetOptCount = await presetSel.locator('option').count()
+  check(
+    'N1b preset dropdown lists the 8 endpoints + Custom',
+    presetOptCount === 9,
+    `options=${presetOptCount}`,
+  )
+
+  // seeded mock URL is not a preset -> select shows "Custom…"
+  check('N2a non-preset URL shown as Custom', (await presetSel.inputValue()) === '')
+  // picking a preset pre-populates the base URL and name inputs
+  await presetSel.selectOption({ label: 'LM Studio' })
+  check(
+    'N2b selecting LM Studio pre-fills URL + name',
+    (await urlInput.inputValue()) === 'http://localhost:3000' &&
+      (await presetSel.inputValue()) === 'http://localhost:3000' &&
+      (await nameInput.inputValue()) === 'LM Studio',
+  )
+  // manual entry still works and drops the select back to "Custom…"
+  await urlInput.fill(`http://127.0.0.1:${PORT}`)
+  check(
+    'N2c manual URL keeps working; select falls back to Custom',
+    (await urlInput.inputValue()) === `http://127.0.0.1:${PORT}` &&
+      (await presetSel.inputValue()) === '',
+  )
+  // restore the seeded name so later sections (e.g. the F1 fallback toast) see "Mock"
+  await nameInput.fill('Mock')
+
+  // N3: "New" adds a profile to the edit box
+  await dlg.locator('.modal-action button[title="Create a new profile"]').click()
+  check(
+    'N3a New creates a new profile in the edit box',
+    (await dlg.locator('h4', { hasText: 'Editing: Server 2' }).count()) === 1,
+    `header=${await dlg.locator('h4').first().innerText()}`,
+  )
+  // re-select the seeded profile so the remaining sections run against it
+  await dlg.locator('.max-h-48 > div', { hasText: 'Mock' }).click()
+  await page.waitForTimeout(300)
+  check(
+    'N3b re-selecting Mock restores it as active',
+    (await modelSelect.inputValue()) === 'story-llama-70b',
+  )
+
+  await dlg.locator('button[title="Close (Esc)"]').click()
   await page.waitForTimeout(250)
-  check('D10b Done button closes the modal', !(await dlgIsOpen()))
+  check('D10b X button closes the modal', !(await dlgIsOpen()))
 
   // ---- U: generation + underline alignment ---------------------------------------
   const BASE = 'The lighthouse keeper climbed the spiral stairs as the storm rolled in off the bay.'
