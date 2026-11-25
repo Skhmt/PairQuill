@@ -157,21 +157,21 @@ function onCancel(e: Event) {
                 </button>
               {/if}
               <button
-                class="btn btn-ghost btn-xs shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
+                class="btn btn-ghost btn-xs shrink-0 opacity-0 transition-opacity group-hover:opacity-100 max-md:opacity-100 max-sm:h-8 max-sm:w-8"
                 title="Rename story"
                 onclick={() => startRename(doc.id, doc.title)}
               >
                 <i class="fa-solid fa-pen"></i>
               </button>
               <button
-                class="btn btn-ghost btn-xs shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
+                class="btn btn-ghost btn-xs shrink-0 opacity-0 transition-opacity group-hover:opacity-100 max-md:opacity-100 max-sm:h-8 max-sm:w-8"
                 title="Export as .txt"
                 onclick={() => onExport(doc)}
               >
                 <i class="fa-solid fa-file-export"></i>
               </button>
               <button
-                class="btn btn-ghost btn-xs shrink-0 text-error opacity-0 transition-opacity hover:bg-error/10 group-hover:opacity-100"
+                class="btn btn-ghost btn-xs shrink-0 text-error opacity-0 transition-opacity hover:bg-error/10 group-hover:opacity-100 max-md:opacity-100 max-sm:h-8 max-sm:w-8"
                 title="Delete story"
                 onclick={() => onDelete(doc.id)}
               >

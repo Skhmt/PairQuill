@@ -71,3 +71,16 @@
   border-radius: 1px;
   background-color: color-mix(in oklab, var(--color-primary) 75%, transparent);
 }
+
+/* ---------- mobile form controls ---------------------------------------------
+ * iOS Safari zooms the whole page when focusing any input with font-size < 16px.
+ * On small screens (all iPhones are <= 430px wide) keep daisyUI form controls at
+ * 16px so tapping a field never triggers that jump: status-bar selects, modal
+ * inputs, menu pickers. */
+@media (max-width: 479px) {
+  .input,
+  .select,
+  .textarea {
+    font-size: 1rem;
+  }
+}

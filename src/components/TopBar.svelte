@@ -136,7 +136,8 @@ const ratingLabel = $derived(RATING_LEVELS.find((r) => r.id === clampRating(rati
 const RATING_TIP = 'Content rating — how explicit generated scenes may be: SFW, romance/softcore, or explicit/hardcore.'
 </script>
 
-<header class="flex h-12 shrink-0 items-center gap-2 border-b border-base-300 bg-base-100 px-3">
+<!-- min-h + flex-wrap (not a fixed h) so narrow viewports wrap to a second row instead of clipping controls. -->
+<header class="flex min-h-12 shrink-0 flex-wrap items-center gap-2 border-b border-base-300 bg-base-100 px-3 py-1.5">
   <div class="relative" data-topbar-menu>
     <button
       class="btn btn-ghost btn-sm"
@@ -148,7 +149,7 @@ const RATING_TIP = 'Content rating — how explicit generated scenes may be: SFW
       <i class="fa-solid fa-bars"></i>
     </button>
     {#if menuOpen}
-      <div role="menu" class="absolute left-0 top-full z-50 mt-1 w-72 overflow-hidden rounded-xl border border-base-300 bg-base-200 py-1 shadow-lg">
+      <div role="menu" class="absolute left-0 top-full z-50 mt-1 max-h-[calc(100dvh-4rem)] w-72 overflow-y-auto rounded-xl border border-base-300 bg-base-200 py-1 shadow-lg">
         <button role="menuitem" class={ITEM} onclick={() => { menuOpen = false; onOpenStories() }}>
           <i class="fa-solid fa-book-open w-4 text-center"></i>
           <span>Stories</span>
@@ -157,6 +158,38 @@ const RATING_TIP = 'Content rating — how explicit generated scenes may be: SFW
           <i class="fa-solid fa-globe w-4 text-center"></i>
           <span>World</span>
         </button>
+
+        {#if hasDoc}
+          <!-- Generation settings live here on narrow screens, where the top bar hides its sliders. -->
+          <div class="my-1 border-t border-base-300"></div>
+          <span class="block px-3 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wider opacity-40">Generation</span>
+          <label class="block px-3 py-1.5">
+            <span class="flex items-center justify-between gap-2 text-sm">
+              <span class="flex items-center gap-2.5"><i class="fa-solid fa-gauge-high w-4 text-center opacity-70"></i>Content rating</span>
+              <span class="text-xs opacity-60">{ratingLabel}</span>
+            </span>
+            <input
+              type="range" min={0} max={2} step={1}
+              value={rating}
+              oninput={(e) => onSetRating(clampRating(Number((e.target as HTMLInputElement).value)))}
+              class="mt-1 range range-primary range-xs w-full"
+              aria-label="Content rating"
+            />
+          </label>
+          <label class="block px-3 py-1.5">
+            <span class="flex items-center justify-between gap-2 text-sm">
+              <span class="flex items-center gap-2.5"><i class="fa-solid fa-ruler-horizontal w-4 text-center opacity-70"></i>Reply length</span>
+              <span class="text-xs tabular-nums opacity-60">{replyTokens.toLocaleString()} tokens · {replyLabel}</span>
+            </span>
+            <input
+              type="range" min={REPLY_MIN_EXP} max={REPLY_MAX_EXP} step={1}
+              value={replyExp}
+              oninput={(e) => onSetReplyLength(2 ** Number((e.target as HTMLInputElement).value))}
+              class="mt-1 range range-primary range-xs w-full"
+              aria-label="Reply length"
+            />
+          </label>
+        {/if}
 
         <div class="my-1 border-t border-base-300"></div>
 
@@ -262,7 +295,8 @@ const RATING_TIP = 'Content rating — how explicit generated scenes may be: SFW
     {/if}
   </div>
 
-  <span class="flex items-center gap-2 pr-1" title="PairQuill">
+  <!-- Brand icon drops out below sm so the generation controls always fit on one row. -->
+  <span class="flex items-center gap-2 pr-1 max-sm:hidden" title="PairQuill">
     <i class="fa-solid fa-feather-pointed text-lg text-primary"></i>
     <span class="hidden font-semibold tracking-tight sm:inline">PairQuill</span>
   </span>
@@ -288,9 +322,9 @@ const RATING_TIP = 'Content rating — how explicit generated scenes may be: SFW
       <span class="hidden whitespace-nowrap text-xs opacity-50 lg:inline">{selection.words} words selected</span>
     {/if}
 
-    <!-- Content rating: how explicit generated scenes may be (left of the reply length) -->
-    <span class="h-5 w-px shrink-0 bg-base-300"></span>
-    <label class="flex items-center gap-1.5" data-tip={RATING_TIP} data-tip-pos="down">
+    <!-- Content rating: how explicit generated scenes may be (left of the reply length). Hidden below md — moves to the menu. -->
+    <span class="hidden h-5 w-px shrink-0 bg-base-300 md:block"></span>
+    <label class="hidden items-center gap-1.5 md:flex" data-tip={RATING_TIP} data-tip-pos="down">
       <i class="fa-solid fa-gauge-high text-xs opacity-50" aria-hidden="true"></i>
       <input
         type="range"
@@ -306,9 +340,9 @@ const RATING_TIP = 'Content rating — how explicit generated scenes may be: SFW
       <span class="w-28 whitespace-nowrap text-left text-[11px] leading-tight opacity-60">{ratingLabel}</span>
     </label>
 
-    <!-- Reply length: caps how long a generated reply may be (left of the selection ops) -->
-    <span class="h-5 w-px shrink-0 bg-base-300"></span>
-    <label class="flex items-center gap-1.5" data-tip={REPLY_TIP} data-tip-pos="down">
+    <!-- Reply length: caps how long a generated reply may be (left of the selection ops). Hidden below md — moves to the menu. -->
+    <span class="hidden h-5 w-px shrink-0 bg-base-300 md:block"></span>
+    <label class="hidden items-center gap-1.5 md:flex" data-tip={REPLY_TIP} data-tip-pos="down">
       <i class="fa-solid fa-ruler-horizontal text-xs opacity-50" aria-hidden="true"></i>
       <input
         type="range"
@@ -367,7 +401,7 @@ const RATING_TIP = 'Content rating — how explicit generated scenes may be: SFW
       </span>
       <span data-tip="Generate the next part of the story from the cursor · Ctrl+Enter" data-tip-pos="down" data-tip-align="end">
         <button class="btn btn-primary btn-sm" onclick={() => onRunOp('continue')}>
-          <i class="fa-solid fa-forward mr-1"></i>Continue
+          <i class="fa-solid fa-forward mr-1 max-sm:mr-0"></i><span class="max-sm:hidden">Continue</span>
         </button>
       </span>
     {/if}

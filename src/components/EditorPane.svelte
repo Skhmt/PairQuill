@@ -43,7 +43,7 @@ let {
   onError: (msg: string) => void
 } = $props()
 
-const fontClass = $derived(fontSize === 'sm' ? 'text-[15px]' : fontSize === 'lg' ? 'text-lg' : 'text-base')
+const fontClass = $derived(fontSize === 'sm' ? 'text-[15px] max-sm:text-base' : fontSize === 'lg' ? 'text-lg' : 'text-base')
 const familyClass = $derived(fontFamily === 'sans' ? 'editor-sans' : fontFamily === 'mono' ? 'editor-mono' : 'editor-serif')
 const measureClass = $derived(measure === 'narrow' ? 'max-w-2xl' : measure === 'wide' ? 'max-w-5xl' : 'max-w-3xl')
 
@@ -470,7 +470,7 @@ async function runOp(op: OpKind, customInstruction?: string) {
 
 <div class="flex min-h-0 flex-1 flex-col bg-base-100">
   <div class="min-h-0 flex-1 overflow-y-auto" bind:this={scrollEl}>
-    <div class={`mx-auto min-h-full px-6 pt-8 pb-1 ${measureClass}`}>
+    <div class={`mx-auto min-h-full px-4 pt-4 sm:px-6 sm:pt-8 pb-1 ${measureClass}`}>
       <!-- relative wrapper == textarea box, so mirror-measured rects map 1:1 onto the overlay -->
       <div class="relative">
         {#each hlRects as r, i (`${i}:${r.top},${r.left}`)}

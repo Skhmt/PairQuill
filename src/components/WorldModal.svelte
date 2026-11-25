@@ -44,7 +44,7 @@ function removeCharacter(id: string) {
 </script>
 
 <dialog class="modal" aria-label="World notes" bind:this={dlg} onclose={onClose}>
-  <div class="modal-box flex max-h-[85vh] min-h-[420px] w-full max-w-3xl flex-col overflow-hidden">
+  <div class="modal-box flex max-h-[85vh] min-h-[min(420px,60vh)] w-full max-w-3xl flex-col overflow-hidden">
     <h3 class="mb-3 shrink-0 text-lg font-bold"><i class="fa-solid fa-globe mr-2 text-primary"></i>World</h3>
 
     {#if doc}

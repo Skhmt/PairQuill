@@ -245,7 +245,7 @@
 </script>
 
 <dialog class="modal" bind:this={dlg} onclose={onClose}>
-  <div class="modal-box w-full max-w-4xl" bind:this={boxEl}>
+  <div class="modal-box max-h-[85vh] w-full max-w-4xl overflow-y-auto" bind:this={boxEl}>
     <div class="mb-3 flex items-center justify-between">
       <h3 class="text-lg font-semibold">
         <i class="fa-solid fa-server mr-2 text-primary"></i>Servers &amp; models
@@ -256,11 +256,11 @@
     </div>
 
     <!-- Two panes: the profile list on the left, the editor for the active
-         profile on the right — wider than before so neither has to stack. -->
-    <div class="flex items-stretch gap-4">
-      <div class="flex w-64 shrink-0 flex-col sm:w-72" data-server-list>
+         profile on the right. Stacks below md so the editor gets full width on phones. -->
+    <div class="flex flex-col gap-4 md:flex-row md:items-stretch">
+      <div class="flex w-full shrink-0 flex-col md:w-64 lg:w-72" data-server-list>
         <span class="label pb-1 text-xs opacity-70">Servers</span>
-        <div class="min-h-[96px] flex-1 space-y-1.5 overflow-y-auto pr-1">
+        <div class="min-h-[96px] max-h-52 flex-1 space-y-1.5 overflow-y-auto pr-1 md:max-h-none">
         {#each profiles as p (p.id)}
           {@const active = p.id === activeProfileId}
           <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->

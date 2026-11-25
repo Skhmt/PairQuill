@@ -85,7 +85,7 @@ function shortModel(m: ModelInfo): string {
     {/if}
 
     <select
-      class="select select-bordered select-xs w-36 shrink-0"
+      class="select select-bordered select-xs w-28 shrink-0 sm:w-36"
       value={activeProfile?.id ?? ''}
       onchange={(e) => onSelectProfile((e.target as HTMLSelectElement).value)}
       title="Server profile"
@@ -98,7 +98,7 @@ function shortModel(m: ModelInfo): string {
 
     <div class="flex shrink-0 items-center gap-1">
       <select
-        class="select select-bordered select-xs w-52 shrink-0"
+        class="select select-bordered select-xs w-40 shrink-0 sm:w-52"
         value={activeProfile?.modelId ?? ''}
         onchange={(e) => onSelectModel((e.target as HTMLSelectElement).value)}
         title={modelTitle}
