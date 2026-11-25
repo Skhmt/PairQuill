@@ -1,5 +1,5 @@
 <script lang="ts">
-import type { EditorCommand, GenStats, GenerationRecord, OpKind, SamplingParams, ServerProfile, StoryDoc } from '../lib/types'
+import type { ContentRating, EditorCommand, GenStats, GenerationRecord, OpKind, SamplingParams, ServerProfile, StoryDoc } from '../lib/types'
 import { uid, wordCount } from '../lib/format'
 import { estimateTokens } from '../lib/tokens'
 import { chatStream } from '../lib/llm'
@@ -12,6 +12,7 @@ let {
   command,
   maxContext,
   maxReplyTokens,
+  rating,
   fontSize,
   measure,
   fontFamily,
@@ -28,6 +29,8 @@ let {
   maxContext: number
   /** Effective cap for reply length in tokens (top-bar slider ∩ profile max tokens). */
   maxReplyTokens: number
+  /** Content rating from the top-bar slider; its guidance block goes into every system prompt. */
+  rating: ContentRating
   fontSize: 'sm' | 'md' | 'lg'
   measure: 'narrow' | 'normal' | 'wide'
   fontFamily: 'serif' | 'sans' | 'mono'
@@ -348,8 +351,8 @@ async function runOp(op: OpKind, customInstruction?: string) {
       selEnd = anchor
       req =
         prev.op === 'instruct'
-          ? buildInstructRequest(profile, doc, anchor, maxContext, prev.instruction, effParams.maxTokens)
-          : buildContinueRequest(profile, doc, anchor, maxContext, effParams.maxTokens)
+          ? buildInstructRequest(profile, doc, anchor, maxContext, prev.instruction, rating, effParams.maxTokens)
+          : buildContinueRequest(profile, doc, anchor, maxContext, rating, effParams.maxTokens)
     } else {
       onError('The last generated text was edited. Select a passage to retry that operation.')
       return
@@ -360,8 +363,8 @@ async function runOp(op: OpKind, customInstruction?: string) {
     selEnd = anchor
     req =
       op === 'instruct'
-        ? buildInstructRequest(profile, doc, anchor, maxContext, customInstruction ?? '', effParams.maxTokens)
-        : buildContinueRequest(profile, doc, anchor, maxContext, effParams.maxTokens)
+        ? buildInstructRequest(profile, doc, anchor, maxContext, customInstruction ?? '', rating, effParams.maxTokens)
+        : buildContinueRequest(profile, doc, anchor, maxContext, rating, effParams.maxTokens)
   } else {
     if (!selRange || selRange.end - selRange.start < 1) {
       onError('Select some text first, then try again.')
@@ -370,7 +373,7 @@ async function runOp(op: OpKind, customInstruction?: string) {
     anchor = selRange.start
     selEnd = selRange.end
     selection = doc.content.slice(anchor, selEnd)
-    req = buildOpRequest(profile, doc, op, selection, anchor, customInstruction)
+    req = buildOpRequest(profile, doc, op, selection, anchor, rating, customInstruction)
   }
 
   const before = doc.content.slice(0, anchor)

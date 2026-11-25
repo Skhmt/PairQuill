@@ -19,6 +19,7 @@ Everything runs entirely in your browser—offline-first, with zero telemetry an
 * **Worldbuilding & Story Bible**: Attach world lore, character cards, and tone/style guides to each story. These are dynamically injected into prompt templates so models maintain continuity.
 * **Live Token & Budget Meter**: Visual gauge tracking prompt budget (system prompt, world notes, characters, story tail, and reserve tokens) against the active model's context window.
 * **Universal OpenAI-Compatible Backend**: Connect out of the box to local inference engines (Ollama, LM Studio, llama.cpp, vLLM, KoboldCpp) or cloud endpoints (OpenRouter, Groq, OpenAI, etc.).
+* **Content Rating Control**: A three-stop slider in the top bar (SFW → Romance/Softcore → Explicit/Hardcore) injects matching guidance into the system prompt of every generation request. The choice persists with your settings, and custom prompt templates can place it exactly where they want via a `{rating}` placeholder.
 * **Offline-First & Local Storage**: Stories and configurations are persisted in browser IndexedDB (no 5MB localStorage limits), effortlessly handling manuscripts exceeding 200k+ words.
 * **Single-File Distribution**: Builds into a self-contained single `.html` file that can be opened directly from disk or hosted on static hosts (GitHub Pages, Cloudflare Pages).
 * **Full Data Sovereignty**: Export and import complete workspaces or single stories as `.json` project files, or export clean manuscripts as `.txt`.
@@ -104,6 +105,25 @@ Click **Test connection** to verify connectivity and automatically populate the 
 
 ---
 
+## Content Rating
+
+The top bar includes a three-stop **content rating** slider that controls how the model is guided on generated prose:
+
+| Stop | Label | Guidance |
+| :--- | :--- | :--- |
+| 0 | SFW | Safe-for-work content only; romantic feelings may be implied, but physical intimacy stops at a kiss. |
+| 1 | Romance / Softcore | Romantic and sensual content at a softcore level; fade to black before anything explicit. |
+| 2 | Explicit / Hardcore | Explicit content is permitted when the story calls for it, written with direct detail and high prose quality. |
+
+The selected stop is injected into the **system prompt of every request** — continuations, retries, and selection operations alike:
+
+* If a server profile's prompt template contains a `{rating}` placeholder, the full rating block (`Content rating: <label>` plus its guidance) is substituted in place.
+* Templates without the placeholder get the rating block appended to the end of the system prompt, so no request can ever miss the selected guidance.
+
+The choice is clamped to the three valid stops and persisted with your app settings (legacy saves without a stored value default to SFW).
+
+---
+
 ## Architecture & Data Storage
 
 * **UI Framework**: [Svelte 5](https://svelte.dev/) with runes (`$state`, `$derived`, `$effect`) for fine-grained reactivity.
@@ -112,7 +132,7 @@ Click **Test connection** to verify connectivity and automatically populate the 
 * **Storage**: Native browser **IndexedDB** (`pairquill` database) stores:
   * `documents`: Stories with content, world notes, character cards, tone notes, and context overrides.
   * `profiles`: Saved LLM server endpoints, parameters, and prompt templates.
-  * `settings`: Theme preferences, typography, line measure, active story, and active profile.
+  * `settings`: Theme preferences, typography, line measure, reply length, content rating, active story, and active profile.
   * `generations`: History of prompt inputs, outputs, and token counts.
 * **Portability**:
   * **Project Files** (`pairquill-project-YYYY-MM-DD.json`): Complete JSON backups containing all documents, world data, server profiles, and generation records.

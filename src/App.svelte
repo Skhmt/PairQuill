@@ -2,6 +2,7 @@
 import type {
   AppSettings,
   BudgetBreakdown,
+  ContentRating,
   EditorCommand,
   GenStats,
   GenerationRecord,
@@ -12,7 +13,7 @@ import type {
   StoryDoc,
   ThemeName,
 } from './lib/types'
-import { THEMES } from './lib/types'
+import { THEMES, clampRating } from './lib/types'
 import { idbDelete, idbDeleteMany, idbGetAll, idbPut, idbPutMany } from './lib/idb'
 import { downloadFile, slugify, uid, wordCount } from './lib/format'
 import { buildProjectFile, parseProjectFile, PROJECT_FORMAT } from './lib/project'
@@ -44,6 +45,7 @@ let settings = $state<AppSettings>({
   measure: 'normal',
   fontFamily: 'serif',
   replyLength: 1024,
+  rating: 0,
 })
 
 // ---------- session state ----------
@@ -79,6 +81,8 @@ const contextExceedsModel = $derived(
 const modelLabel = $derived(activeProfile?.modelId ?? '')
 /** Effective reply cap: top-bar slider, further limited by the profile's max tokens (if set). */
 const replyCap = $derived(effectiveMaxTokens(activeProfile, settings.replyLength))
+/** Content rating from the top-bar slider, clamped so hand-edited settings stay valid. */
+const rating = $derived(clampRating(settings.rating))
 
 /** Approximate token budget for the active doc, shown in the Context tab. */
 const budget = $derived.by((): BudgetBreakdown | null => {
@@ -87,7 +91,7 @@ const budget = $derived.by((): BudgetBreakdown | null => {
   if (!d || !p) return null
   const b = computeBudget({
     maxContext,
-    systemPrompt: renderSystemPrompt(p, d),
+    systemPrompt: renderSystemPrompt(p, d, rating),
     worldText: worldText(d),
     characterText: characterText(d),
     toneText: d.tone,
@@ -547,6 +551,8 @@ $effect(() => {
     onStop={() => (commandRef = { kind: 'stop' })}
     replyLength={settings.replyLength}
     onSetReplyLength={(n) => (settings.replyLength = n)}
+    rating={rating}
+    onSetRating={(r: ContentRating) => (settings.rating = r)}
   />
 
   <div class="flex min-h-0 flex-1">
@@ -563,6 +569,7 @@ $effect(() => {
             command={commandRef}
             maxContext={maxContext}
             maxReplyTokens={replyCap}
+            rating={rating}
             fontSize={settings.fontSize}
             measure={settings.measure}
             fontFamily={settings.fontFamily}

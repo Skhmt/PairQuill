@@ -1,6 +1,6 @@
 <script lang="ts">
-import { THEMES } from '../lib/types'
-import type { GenStats, OpKind, ThemeName } from '../lib/types'
+import { RATING_LEVELS, THEMES, clampRating } from '../lib/types'
+import type { ContentRating, GenStats, OpKind, ThemeName } from '../lib/types'
 import { OP_LABELS } from '../lib/prompts'
 
 let {
@@ -30,6 +30,8 @@ let {
   onStop,
   replyLength,
   onSetReplyLength,
+  rating,
+  onSetRating,
 }: {
   theme: ThemeName
   hasDoc: boolean
@@ -64,6 +66,9 @@ let {
   /** Reply-length setting in tokens (top-bar slider, left of the selection ops). */
   replyLength: number
   onSetReplyLength: (tokens: number) => void
+  /** Content rating for generated prose (top-bar slider, left of the reply length). */
+  rating: ContentRating
+  onSetRating: (rating: ContentRating) => void
 } = $props()
 
 let menuOpen = $state(false)
@@ -123,6 +128,12 @@ const replyTokens = $derived(2 ** replyExp)
 const replyLabel = $derived(REPLY_LABELS[replyTokens] ?? `${Math.round(replyLength).toLocaleString()} tokens`)
 /** Constant tooltip — the live value is shown right in the bar, so keep this static. */
 const REPLY_TIP = 'Reply length — how long generated replies may be. A profile’s max-token limit still applies.'
+
+// ---------- content-rating slider (0 = SFW, 1 = romance/softcore, 2 = explicit/hardcore) ----------
+/** Live label for the selected rating stop (shown right in the bar). */
+const ratingLabel = $derived(RATING_LEVELS.find((r) => r.id === clampRating(rating))?.label ?? 'SFW')
+/** Constant tooltip — the live value is shown right in the bar, so keep this static. */
+const RATING_TIP = 'Content rating — how explicit generated scenes may be: SFW, romance/softcore, or explicit/hardcore.'
 </script>
 
 <header class="flex h-12 shrink-0 items-center gap-2 border-b border-base-300 bg-base-100 px-3">
@@ -276,6 +287,24 @@ const REPLY_TIP = 'Reply length — how long generated replies may be. A profile
     {#if selection.has && !genStats.active}
       <span class="hidden whitespace-nowrap text-xs opacity-50 lg:inline">{selection.words} words selected</span>
     {/if}
+
+    <!-- Content rating: how explicit generated scenes may be (left of the reply length) -->
+    <span class="h-5 w-px shrink-0 bg-base-300"></span>
+    <label class="flex items-center gap-1.5" data-tip={RATING_TIP} data-tip-pos="down">
+      <i class="fa-solid fa-gauge-high text-xs opacity-50" aria-hidden="true"></i>
+      <input
+        type="range"
+        min={0}
+        max={2}
+        step={1}
+        value={rating}
+        oninput={(e) => onSetRating(clampRating(Number((e.target as HTMLInputElement).value)))}
+        class="range range-primary range-xs w-20 sm:w-24"
+        aria-label="Content rating"
+      />
+      <!-- Fixed width so the bar never reflows while dragging -->
+      <span class="w-28 whitespace-nowrap text-left text-[11px] leading-tight opacity-60">{ratingLabel}</span>
+    </label>
 
     <!-- Reply length: caps how long a generated reply may be (left of the selection ops) -->
     <span class="h-5 w-px shrink-0 bg-base-300"></span>

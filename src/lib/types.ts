@@ -19,6 +19,21 @@ export interface SamplingParams {
   stopSequences: string[]
 }
 
+/** Content rating for generated prose, set by the top-bar slider: 0 = SFW, 1 = romance/softcore, 2 = explicit/hardcore. */
+export type ContentRating = 0 | 1 | 2
+
+/** The three content-rating stops of the top-bar slider, in order. */
+export const RATING_LEVELS: { id: ContentRating; label: string }[] = [
+  { id: 0, label: 'SFW' },
+  { id: 1, label: 'Romance / Softcore' },
+  { id: 2, label: 'Explicit / Hardcore' },
+]
+
+/** Clamp an arbitrary number to a valid content rating (guards hand-edited settings). */
+export function clampRating(v: number): ContentRating {
+  return v <= 0 ? 0 : v >= 2 ? 2 : 1
+}
+
 /** A saved LLM endpoint (llama.cpp, LM Studio, KoboldCpp, Unsloth Desktop, cloud OpenAI-compatible...). */
 export interface ServerProfile {
   id: string
@@ -84,6 +99,8 @@ export interface AppSettings {
   fontFamily: 'serif' | 'sans' | 'mono'
   /** Max length of a generated reply in tokens — top-bar slider (persisted). */
   replyLength: number
+  /** Content rating for generated prose — top-bar slider (persisted; legacy saves fall back to the SFW default). */
+  rating: ContentRating
 }
 
 /** Commands the editor executes (insert text / run an op / open a dialog / stop). */

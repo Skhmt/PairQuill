@@ -2,7 +2,8 @@
 // unified TopBar (hamburger menu with Stories/World + text styling, generation controls),
 // Stories modal (new/rename/import/export/delete), World modal, Context modal,
 // StatusBar (no save-state indicator), generation against a self-contained mock
-// OpenAI-compatible server (models + SSE chat stream).
+// OpenAI-compatible server (models + SSE chat stream), reply-length slider behavior,
+// and the content rating slider (3 stops, guidance injected into every system prompt).
 // Logs every step to verify-steps.log.
 import http from 'node:http'
 import path from 'node:path'
@@ -23,6 +24,8 @@ const PORT = 9877
 const GENERATED = ' The wind picked up, and every lantern along the pier swung in unison.'
 let chatHits = 0
 let modelsHits = 0
+/** Body of the most recent /chat/completions request (lets tests assert on prompt contents). */
+let lastChatBody = null
 const srv = http.createServer((req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*')
   if (req.method === 'OPTIONS') { res.setHeader('Access-Control-Allow-Headers', '*'); res.end(); return }
@@ -34,6 +37,11 @@ const srv = http.createServer((req, res) => {
   }
   if ((req.url ?? '').includes('/chat/completions')) {
     chatHits++
+    const bodyParts = []
+    req.on('data', (c) => bodyParts.push(c))
+    req.on('end', () => {
+      try { lastChatBody = JSON.parse(Buffer.concat(bodyParts).toString('utf8')) } catch { lastChatBody = null }
+    })
     res.setHeader('Content-Type', 'text/event-stream')
     const chunks = GENERATED.match(/.{1,12}/gs) ?? []
     let i = 0
@@ -402,6 +410,68 @@ try {
     .catch(() => false)
   check('T7c instruct: generation ran and appended at cursor', instructed && chatHits === 3, `chatHits=${chatHits}`)
   check('T7c instruct: text actually grew', (await ta.inputValue()).length > lenBeforeInstr)
+
+  // ---- T7d: content rating — slider guidance flows into every request ----------
+  const ratingSlider = page.locator('input[type="range"][aria-label="Content rating"]')
+  check(
+    'T7d rating: slider present with 3 stops (0..2), defaulting to SFW',
+    (await ratingSlider.count()) === 1 &&
+      (await ratingSlider.getAttribute('min')) === '0' &&
+      (await ratingSlider.getAttribute('max')) === '2' &&
+      (await ratingSlider.inputValue()) === '0',
+  )
+  check(
+    'T7d rating: SFW label shown in the bar',
+    (await page.locator('header').getByText('SFW', { exact: true }).count()) === 1,
+  )
+  const windCount = async () => (await ta.inputValue()).split(GENERATED).length - 1
+  await page.waitForTimeout(500) // let the last generation's stream fully commit before baselining
+  let expectedWind = await windCount() // one mock sentence per generation so far
+  const ratingPrompts = []
+  for (const [label, phrase] of [
+    ['SFW', 'safe for work'],
+    ['Romance / Softcore', 'softcore level'],
+    ['Explicit / Hardcore', 'Explicit content is permitted'],
+  ]) {
+    const target = label === 'SFW' ? 0 : label.startsWith('Romance') ? 1 : 2
+    await ratingSlider.focus()
+    while (Number(await ratingSlider.inputValue()) !== target) {
+      await page.keyboard.press(Number(await ratingSlider.inputValue()) < target ? 'ArrowRight' : 'ArrowLeft')
+    }
+    check(
+      `T7d rating: bar label shows "${label}"`,
+      (await page.locator('header').getByText(label, { exact: true }).count()) === 1,
+    )
+    const prevBody = lastChatBody
+    await contBtn.click()
+    expectedWind++
+    // Node-side wait for the new request body to be captured, then page-side wait for
+    // the mock sentence to land in the editor; assert on the captured snapshot.
+    const deadline = Date.now() + 10_000
+    while (lastChatBody === prevBody && Date.now() < deadline) await page.waitForTimeout(50)
+    const body = lastChatBody
+    const sysPrompt = body?.messages?.[0]?.content ?? ''
+    ratingPrompts.push(sysPrompt)
+    const settled = await page
+      .waitForFunction(
+        // Playwright passes `arg` as a single value — destructure the [gen, n] pair.
+        ([gen, n]) => document.querySelector('textarea[placeholder^="Start writing"]').value.split(gen).length - 1 >= n,
+        [GENERATED, expectedWind],
+        { timeout: 10_000 },
+      )
+      .then(() => true)
+      .catch(() => false)
+    check(
+      `T7d rating: request at "${label}" carries its guidance`,
+      body !== prevBody && settled && sysPrompt.includes(`Content rating: ${label}`) && sysPrompt.includes(phrase),
+      `newBody=${body !== prevBody} settled=${settled} wind=${await windCount()} hasRatingBlock=${sysPrompt.includes('Content rating:')}`,
+    )
+  }
+  check(
+    'T7d rating: system prompt differs for every stop',
+    new Set(ratingPrompts).size === 3,
+    `unique=${new Set(ratingPrompts).size}`,
+  )
 
   // ---- T8: save current story (.json) + re-import it --------------------------
   const dlPath = path.join(os.tmpdir(), 'pairquill-verify-story.json')

@@ -1,7 +1,8 @@
 // Prompt construction: system templates with world-data variables, and per-operation user messages.
 
 import type { ChatMessage, } from './llm'
-import type { OpKind, ServerProfile, StoryDoc } from './types'
+import type { ContentRating, OpKind, ServerProfile, StoryDoc } from './types'
+import { RATING_LEVELS } from './types'
 import { computeBudget, storyTail } from './tokens'
 
 export const OP_LABELS: Record<OpKind, string> = {
@@ -37,13 +38,33 @@ export function characterText(doc: StoryDoc): string {
   return doc.characters.map((c) => `### ${c.name || 'Unnamed'}\n${c.description}`).join('\n\n')
 }
 
-/** Render the profile's system prompt template with the document's side-channel data. */
-export function renderSystemPrompt(profile: ServerProfile, doc: StoryDoc): string {
+/** Content-level guidance injected into every system prompt, keyed by the top-bar rating slider. */
+const RATING_GUIDANCE: Record<ContentRating, string> = {
+  0: 'Keep all generated content safe for work: nothing sexual, explicit, or graphic. Romantic feelings may be implied, but physical intimacy stops at a kiss — fade out before anything more.',
+  1: 'Write romantic and sensual content at a softcore level: affection, kissing, emotional intimacy, and charged tension are welcome, but never depict sexual acts directly. Fade to black before anything explicit and keep descriptions tasteful rather than graphic.',
+  2: 'Explicit content is permitted when the story calls for it: write intimate or sexual scenes with direct, unflinching detail and high prose quality, staying consistent with the characters, tone, and world above.',
+}
+
+/** The "Content rating" block that every request's system prompt must carry. */
+export function ratingSection(rating: ContentRating): string {
+  const level = RATING_LEVELS.find((r) => r.id === rating) ?? RATING_LEVELS[0]
+  return `Content rating: ${level.label}\n${RATING_GUIDANCE[level.id]}`
+}
+
+/**
+ * Render the profile's system prompt template with the document's side-channel data.
+ * The {rating} placeholder injects the content-rating block; templates without it get
+ * the block appended, so every request always carries the selected rating's guidance.
+ */
+export function renderSystemPrompt(profile: ServerProfile, doc: StoryDoc, rating: ContentRating): string {
   const tpl = profile.systemPromptTemplate.trim() || DEFAULT_SYSTEM_TEMPLATE
-  return tpl
+  let out = tpl
     .replaceAll('{world_notes}', sectionOrNone(worldText(doc)))
     .replaceAll('{characters}', sectionOrNone(characterText(doc)))
     .replaceAll('{tone}', sectionOrNone(doc.tone))
+    .replaceAll('{rating}', ratingSection(rating))
+  if (!tpl.includes('{rating}')) out += `\n\n${ratingSection(rating)}`
+  return out
 }
 
 const OP_INSTRUCTIONS: Record<'expand' | 'condense' | 'grammar', string> = {
@@ -95,9 +116,10 @@ export function buildOpRequest(
   op: 'expand' | 'condense' | 'grammar' | 'custom',
   selection: string,
   selStart: number,
+  rating: ContentRating,
   customInstruction?: string,
 ): BuiltRequest {
-  const systemPrompt = renderSystemPrompt(profile, doc)
+  const systemPrompt = renderSystemPrompt(profile, doc, rating)
   const before = doc.content.slice(Math.max(0, selStart - CONTEXT_CHARS), selStart)
   const instruction =
     op === 'custom'
@@ -129,11 +151,12 @@ function buildCursorRequest(
   doc: StoryDoc,
   cursorPos: number,
   maxContext: number,
+  rating: ContentRating,
   instruction?: string,
   /** Effective reply cap (tokens): reserves context-window room and drives the soft length hint. */
   maxTokens?: number,
 ): BuiltRequest {
-  const systemPrompt = renderSystemPrompt(profile, doc)
+  const systemPrompt = renderSystemPrompt(profile, doc, rating)
   // The hard cap that will actually be sent as max_tokens (slider ∩ profile limit).
   // When neither is set the server decides, so no length hint is added.
   const cap =
@@ -170,9 +193,10 @@ export function buildContinueRequest(
   doc: StoryDoc,
   cursorPos: number,
   maxContext: number,
+  rating: ContentRating,
   maxTokens?: number,
 ): BuiltRequest {
-  return buildCursorRequest(profile, doc, cursorPos, maxContext, undefined, maxTokens)
+  return buildCursorRequest(profile, doc, cursorPos, maxContext, rating, undefined, maxTokens)
 }
 
 /** Build messages for "instruct": continue from the cursor with custom guidance. */
@@ -182,9 +206,10 @@ export function buildInstructRequest(
   cursorPos: number,
   maxContext: number,
   instruction: string,
+  rating: ContentRating,
   maxTokens?: number,
 ): BuiltRequest {
-  return buildCursorRequest(profile, doc, cursorPos, maxContext, instruction, maxTokens)
+  return buildCursorRequest(profile, doc, cursorPos, maxContext, rating, instruction, maxTokens)
 }
 
 export function toMessages(systemPrompt: string, userMessage: string): ChatMessage[] {
