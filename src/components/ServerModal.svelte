@@ -92,7 +92,9 @@
    * scrollbar of its own — and clicking that outer scrollbar is an "outside" pointerdown
    * that closes the dropdown (making the bottom of long lists unreachable). Fitting the
    * list into the larger free space above/below the input keeps it inside the box, so no
-   * outer scrollbar can appear.
+   * outer scrollbar can appear. Below md the panes stack and the input sits high in a tall
+   * scrollable box, so the list always opens downward (opening up would cover the server
+   * list and the refresh button) after nudging the box's scroll to make room below.
    */
   const DROPDOWN_MAX_H = 224; // was max-h-56
   const DROPDOWN_MIN_H = 120;
@@ -108,6 +110,21 @@
     const reserve = 36; // "Showing first N of M" footer + margins/borders
     const below = b.bottom - pad - i.bottom - reserve;
     const above = i.top - (b.top + pad) - reserve;
+    if (window.innerWidth < 768) {
+      // Stacked phone layout: opening upward would cover the server list and the Model ID
+      // row itself (the refresh button sits right there). Open downward instead — first
+      // nudge the box's scroll so there is room under the input, then size the list to it.
+      const need = DROPDOWN_MAX_H - below;
+      if (need > 0) {
+        const maxScroll = boxEl.scrollHeight - boxEl.clientHeight;
+        boxEl.scrollTop = Math.min(maxScroll, boxEl.scrollTop + need);
+      }
+      const i2 = input.getBoundingClientRect();
+      const b2 = boxEl.getBoundingClientRect();
+      dropUp = false;
+      listMaxH = Math.max(80, Math.min(DROPDOWN_MAX_H, b2.bottom - pad - i2.bottom - reserve));
+      return;
+    }
     dropUp = above > below;
     listMaxH = Math.min(
       DROPDOWN_MAX_H,
