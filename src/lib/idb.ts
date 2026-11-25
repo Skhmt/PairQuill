@@ -76,14 +76,32 @@ function openDB(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains('generations')) db.createObjectStore('generations', { keyPath: 'id' })
     }
     req.onsuccess = async () => {
+      const db = req.result
+      db.onversionchange = () => {
+        db.close()
+        dbPromise = null
+      }
       try {
-        await migrateLegacyDB(req.result)
+        await migrateLegacyDB(db)
       } catch {}
-      resolve(req.result)
+      resolve(db)
     }
-    req.onerror = () => reject(req.error ?? new Error('Failed to open IndexedDB'))
+    req.onerror = () => {
+      dbPromise = null
+      reject(req.error ?? new Error('Failed to open IndexedDB'))
+    }
   })
   return dbPromise
+}
+
+export async function requestPersistentStorage(): Promise<void> {
+  try {
+    if (typeof navigator !== 'undefined' && navigator.storage?.persist) {
+      await navigator.storage.persist()
+    }
+  } catch {
+    /* ignore */
+  }
 }
 
 function run<T>(store: StoreName, mode: IDBTransactionMode, fn: (s: IDBObjectStore) => IDBRequest): Promise<T> {

@@ -244,6 +244,31 @@ $effect(() => {
 
 let prevLen = 0
 let fitRaf = 0
+const MAX_UNDO = 30
+let undoStack: string[] = []
+/** Tracks the last doc.content produced by a programmatic edit so Ctrl+Z undoes AI ops without hijacking manual typing undo. */
+let lastProgrammaticContent: string | null = null
+
+function pushUndo(snapshot: string) {
+  if (undoStack[undoStack.length - 1] === snapshot) return
+  undoStack.push(snapshot)
+  if (undoStack.length > MAX_UNDO) undoStack.shift()
+}
+
+function handleEditorKeydown(e: KeyboardEvent) {
+  if (gen) return
+  const mod = e.ctrlKey || e.metaKey
+  if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'z') {
+    if (undoStack.length > 0 && lastProgrammaticContent === doc.content) {
+      e.preventDefault()
+      const prev = undoStack.pop()!
+      doc.content = prev
+      doc.updatedAt = Date.now()
+      lastProgrammaticContent = undoStack.length > 0 ? prev : null
+      newRange = null
+    }
+  }
+}
 
 // Auto-size the writing textarea so the editor fills the pane down to the bottom
 // of the viewport (and scrolls only when the content outgrows it).
@@ -302,6 +327,7 @@ $effect(() => {
 
 function handleInput(e: Event) {
   if (gen) return
+  lastProgrammaticContent = null
   newRange = null // any manual edit clears the "new text" highlight
   doc.content = (e.target as HTMLTextAreaElement).value
   doc.updatedAt = Date.now()
@@ -313,7 +339,9 @@ function insertText(text: string) {
   const el = textareaEl
   const start = el?.selectionStart ?? doc.content.length
   const end = el?.selectionEnd ?? start
+  pushUndo(doc.content)
   doc.content = doc.content.slice(0, start) + text + doc.content.slice(end)
+  lastProgrammaticContent = doc.content
   doc.updatedAt = Date.now()
   requestAnimationFrame(() => {
     if (el) {
@@ -389,8 +417,10 @@ async function runOp(op: OpKind, customInstruction?: string) {
     req = buildOpRequest(profile, doc, op, selection, anchor, rating, customInstruction)
   }
 
-  const before = doc.content.slice(0, anchor)
-  const after = doc.content.slice(selEnd)
+  const originalContent = doc.content
+  const before = originalContent.slice(0, anchor)
+  const after = originalContent.slice(selEnd)
+  const isReplaceOp = anchor !== selEnd
   const label =
     op === 'custom' || op === 'instruct' ? (customInstruction?.trim() || OP_LABELS[op]) : OP_LABELS[op]
 
@@ -401,6 +431,7 @@ async function runOp(op: OpKind, customInstruction?: string) {
 
   let full = ''
   let lastFlush = 0
+  let undoPushed = false
   const estPrompt = estimateTokens(req.systemPrompt + '\n' + req.userMessage)
   onGenStats({ active: true, promptTokens: estPrompt, completionTokens: 0, label })
 
@@ -424,6 +455,8 @@ async function runOp(op: OpKind, customInstruction?: string) {
     })
   }
 
+  let aborted = false
+  let failed = false
   try {
     const result = await chatStream(
       profile.baseUrl,
@@ -438,6 +471,10 @@ async function runOp(op: OpKind, customInstruction?: string) {
           const now = performance.now()
           if (now - lastFlush > 60 || t.length > 200) {
             // batched flush keeps UI updates efficient while feeling live
+            if (!undoPushed) {
+              pushUndo(originalContent)
+              undoPushed = true
+            }
             lastFlush = now
             doc.content = before + full + after
             shownLen = full.length
@@ -454,15 +491,37 @@ async function runOp(op: OpKind, customInstruction?: string) {
     }
   } catch (e) {
     const err = e as Error
-    if (err.name === 'AbortError') recordGeneration() // keep whatever partial text arrived
-    else onError(err.message || 'Generation failed')
+    if (err.name === 'AbortError') {
+      aborted = true
+      recordGeneration() // keep whatever partial text arrived
+    } else {
+      failed = true
+      onError(err.message || 'Generation failed')
+    }
   } finally {
-    doc.content = before + full + after
-    shownLen = full.length
-    doc.updatedAt = Date.now()
-    // Highlight everything this generation added (works for both insert & replace ops).
-    newRange = full.trim() ? { start: anchor, end: anchor + full.length } : null
-    if (full.trim()) {
+    // Never delete a replaced selection if the request failed, returned empty text, or produced nothing.
+    const shouldRestore =
+      full.length === 0 ||
+      (!full.trim() && isReplaceOp) ||
+      (failed && isReplaceOp && !aborted)
+
+    if (shouldRestore) {
+      if (undoPushed) undoStack.pop()
+      if (doc.content !== originalContent) {
+        doc.content = originalContent
+      }
+      shownLen = 0
+      newRange = null
+    } else {
+      if (!undoPushed) pushUndo(originalContent)
+      doc.content = before + full + after
+      lastProgrammaticContent = doc.content
+      shownLen = full.length
+      doc.updatedAt = Date.now()
+      // Highlight everything this generation added (works for both insert & replace ops).
+      newRange = full.trim() ? { start: anchor, end: anchor + full.length } : null
+    }
+    if (full.trim() && !shouldRestore) {
       lastGen = {
         op,
         instruction: customInstruction?.trim() ?? '',
@@ -497,6 +556,7 @@ async function runOp(op: OpKind, customInstruction?: string) {
           value={doc.content}
           readonly={!!gen}
           oninput={handleInput}
+          onkeydown={handleEditorKeydown}
           onclick={updateSelection}
           onkeyup={updateSelection}
           onfocus={updateSelection}

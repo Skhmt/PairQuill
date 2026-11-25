@@ -14,7 +14,7 @@ import type {
   ThemeName,
 } from './lib/types'
 import { THEMES, clampRating } from './lib/types'
-import { idbDelete, idbDeleteMany, idbGetAll, idbPut, idbPutMany } from './lib/idb'
+import { idbDeleteMany, idbGetAll, idbPut, idbPutMany, requestPersistentStorage } from './lib/idb'
 import { downloadFile, slugify, uid, wordCount } from './lib/format'
 import { buildProjectFile, parseProjectFile, PROJECT_FORMAT } from './lib/project'
 import type { ProjectFile } from './lib/project'
@@ -150,6 +150,9 @@ const budget = $derived.by((): BudgetBreakdown | null => {
 // ---------- persistence ----------
 const SETTINGS_KEY = 'app'
 const MAX_GENERATIONS = 200
+const tabId = uid()
+const syncChannel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('pairquill-sync') : null
+let loadFailed = false
 
 async function loadAll() {
   try {
@@ -170,7 +173,9 @@ async function loadAll() {
       if (!THEMES.includes(rawTheme as ThemeName)) settings.theme = rawTheme === 'light' ? 'caramellatte' : 'abyss'
     }
     generations = g.sort((a, b) => b.ts - a.ts).slice(0, MAX_GENERATIONS)
+    void requestPersistentStorage()
   } catch (e) {
+    loadFailed = true
     showToast(`Could not load saved data: ${(e as Error).message}`, 'error')
   } finally {
     loaded = true
@@ -180,6 +185,7 @@ async function loadAll() {
 void loadAll()
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null
+let activeWrite: Promise<void> | null = null
 const savedDocVersions = new Map<string, number>()
 const dirtyDocIds = new Set<string>()
 const deletedDocIds = new Set<string>()
@@ -187,6 +193,10 @@ let profilesDirty = false
 let settingsDirty = false
 let generationsDirty = false
 let skipInitialTrack = true
+
+function hasDirtyState(): boolean {
+  return dirtyDocIds.size > 0 || deletedDocIds.size > 0 || profilesDirty || settingsDirty || generationsDirty
+}
 
 /**
  * IndexedDB structured-clones every value it stores, and a live $state proxy is not
@@ -197,66 +207,121 @@ function plain<T>(value: T): T {
 }
 
 /**
- * Sync one keyed store with the in-memory list: write every current record and delete
- * anything still sitting in IndexedDB that is no longer in state — otherwise deleted
- * stories, profiles or generation records would reappear on the next reload.
+ * Sync one keyed store with the in-memory list: write every current record first, then
+ * delete anything still sitting in IndexedDB that is no longer in state — otherwise
+ * deleted profiles or generation records would reappear on the next reload.
  */
 async function syncStore(
   store: 'profiles' | 'generations',
   items: { id: string }[],
 ): Promise<void> {
+  const plainItems = items.map((i) => plain(i))
+  await idbPutMany(store, plainItems)
   const keep = new Set(items.map((i) => i.id))
   const existing = await idbGetAll<{ id: string }>(store)
   const toDelete = existing.filter((x) => !keep.has(x.id)).map((x) => x.id)
-  await idbPutMany(store, items.map((i) => plain(i)))
   if (toDelete.length > 0) {
     await idbDeleteMany(store, toDelete)
   }
 }
 
-async function writeAll(): Promise<void> {
+async function flushWritesOnce(): Promise<void> {
+  if (loadFailed) return
   const tasks: Promise<unknown>[] = []
+  let wrote = false
 
   if (dirtyDocIds.size > 0) {
-    const ids = Array.from(dirtyDocIds)
-    dirtyDocIds.clear()
-    const toPut: StoryDoc[] = []
-    for (const id of ids) {
+    const snapshots: { doc: StoryDoc; updatedAt: number }[] = []
+    for (const id of dirtyDocIds) {
       const doc = docs.find((d) => d.id === id)
-      if (doc) {
-        toPut.push(plain(doc))
-        savedDocVersions.set(doc.id, doc.updatedAt)
-      }
+      if (doc) snapshots.push({ doc: plain(doc), updatedAt: doc.updatedAt })
+      else dirtyDocIds.delete(id)
     }
-    if (toPut.length > 0) tasks.push(idbPutMany('documents', toPut))
+    if (snapshots.length > 0) {
+      tasks.push(
+        idbPutMany('documents', snapshots.map((s) => s.doc)).then(() => {
+          wrote = true
+          for (const s of snapshots) {
+            savedDocVersions.set(s.doc.id, s.updatedAt)
+            const live = docs.find((d) => d.id === s.doc.id)
+            if (!live || live.updatedAt === s.updatedAt) {
+              dirtyDocIds.delete(s.doc.id)
+            }
+          }
+        }),
+      )
+    }
   }
 
   if (deletedDocIds.size > 0) {
     const toDelete = Array.from(deletedDocIds)
-    deletedDocIds.clear()
-    for (const id of toDelete) savedDocVersions.delete(id)
-    tasks.push(idbDeleteMany('documents', toDelete))
+    tasks.push(
+      idbDeleteMany('documents', toDelete).then(() => {
+        wrote = true
+        for (const id of toDelete) {
+          deletedDocIds.delete(id)
+          savedDocVersions.delete(id)
+        }
+      }),
+    )
   }
 
   if (profilesDirty) {
-    profilesDirty = false
-    tasks.push(syncStore('profiles', profiles))
+    const snapshot = profiles.map((p) => ({ ...p }))
+    tasks.push(
+      syncStore('profiles', snapshot).then(() => {
+        wrote = true
+        profilesDirty = false
+      }),
+    )
   }
 
   if (settingsDirty) {
-    settingsDirty = false
-    tasks.push(idbPut('settings', plain(settings), SETTINGS_KEY))
+    const snapshot = plain(settings)
+    tasks.push(
+      idbPut('settings', snapshot, SETTINGS_KEY).then(() => {
+        wrote = true
+        settingsDirty = false
+      }),
+    )
   }
 
   if (generationsDirty) {
-    generationsDirty = false
-    tasks.push(syncStore('generations', generations.slice(0, MAX_GENERATIONS)))
+    const snapshot = generations.slice(0, MAX_GENERATIONS)
+    tasks.push(
+      syncStore('generations', snapshot).then(() => {
+        wrote = true
+        generationsDirty = false
+      }),
+    )
   }
 
-  if (tasks.length > 0) await Promise.all(tasks)
+  if (tasks.length > 0) {
+    await Promise.all(tasks)
+    if (wrote) syncChannel?.postMessage({ tabId })
+  }
+}
+
+async function writeAll(): Promise<void> {
+  if (activeWrite) {
+    await activeWrite
+    if (hasDirtyState()) return writeAll()
+    return
+  }
+  activeWrite = (async () => {
+    try {
+      while (hasDirtyState() && !loadFailed) {
+        await flushWritesOnce()
+      }
+    } finally {
+      activeWrite = null
+    }
+  })()
+  await activeWrite
 }
 
 function scheduleSave(): void {
+  if (loadFailed) return
   if (saveTimer) clearTimeout(saveTimer)
   saveTimer = setTimeout(async () => {
     saveTimer = null
@@ -266,6 +331,16 @@ function scheduleSave(): void {
       showToast('Could not save to browser storage.', 'error')
     }
   }, 800)
+}
+
+function flushPendingSaves(): void {
+  if (loadFailed) return
+  if (!saveTimer && !hasDirtyState()) return
+  if (saveTimer) {
+    clearTimeout(saveTimer)
+    saveTimer = null
+  }
+  void writeAll().catch(() => {})
 }
 
 /**
@@ -347,14 +422,20 @@ $effect(() => {
   scheduleSave()
 })
 
-// Flush a pending debounced write when the tab is hidden/closed so a quick reload
-// right after an edit doesn't lose it (IndexedDB commits queued transactions on unload).
-window.addEventListener('pagehide', () => {
-  if (!saveTimer) return
-  clearTimeout(saveTimer)
-  saveTimer = null
-  void writeAll().catch(() => {})
+// Flush pending writes when the tab is hidden or closed so a quick reload or mobile
+// backgrounding doesn't lose recent edits.
+window.addEventListener('pagehide', flushPendingSaves)
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') flushPendingSaves()
 })
+
+if (syncChannel) {
+  syncChannel.onmessage = (e: MessageEvent<{ tabId?: string }>) => {
+    if (e.data?.tabId && e.data.tabId !== tabId) {
+      showToast('Another PairQuill tab saved changes. Reload this tab to avoid overwriting them.', 'error')
+    }
+  }
+}
 
 // ---------- toasts ----------
 let toastTimer: ReturnType<typeof setTimeout> | null = null
