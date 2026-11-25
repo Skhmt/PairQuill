@@ -112,8 +112,8 @@ The top bar includes a three-stop **content rating** slider that controls how th
 | Stop | Label | Guidance |
 | :--- | :--- | :--- |
 | 0 | SFW | Safe-for-work content only; romantic feelings may be implied, but physical intimacy stops at a kiss. |
-| 1 | Romance / Softcore | Romantic and sensual content at a softcore level; fade to black before anything explicit. |
-| 2 | Explicit / Hardcore | Explicit content is permitted when the story calls for it, written with direct detail and high prose quality. |
+| 1 | Suggestive | Romantic and sensual content at a softcore level; fade to black before anything explicit. |
+| 2 | Explicit | Explicit content is permitted when the story calls for it, written with direct detail and high prose quality. |
 
 The selected stop is injected into the **system prompt of every request** — continuations, retries, and selection operations alike:
 
