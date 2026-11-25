@@ -130,9 +130,13 @@ function applyInstruct() {
 
 // Report selection state (word count included) for the top bar's hint + op buttons.
 $effect(() => {
+  if (!hasSelection || !selRange) {
+    onSelectionChange({ has: false, words: 0 })
+    return
+  }
   onSelectionChange({
-    has: hasSelection,
-    words: selRange ? wordCount(doc.content.slice(selRange.start, selRange.end)) : 0,
+    has: true,
+    words: wordCount(doc.content.slice(selRange.start, selRange.end)),
   })
 })
 
@@ -239,6 +243,7 @@ $effect(() => {
 })
 
 let prevLen = 0
+let fitRaf = 0
 
 // Auto-size the writing textarea so the editor fills the pane down to the bottom
 // of the viewport (and scrolls only when the content outgrows it).
@@ -246,12 +251,14 @@ function fitEditor() {
   const el = textareaEl
   const sc = scrollEl
   if (!el || !sc) return
+  if (fitRaf) cancelAnimationFrame(fitRaf)
   // The textarea keeps overflow:hidden (see its class), so the measured height below is
   // always the *true* text height at full width. If it could show its own scrollbar,
   // the box would be ~15px narrower, wrap extra lines, and bake phantom blank space
   // into the explicit height on long stories (which then persists — scrollHeight never
   // shrinks). The outer div is the only scroller.
-  requestAnimationFrame(() => {
+  fitRaf = requestAnimationFrame(() => {
+    fitRaf = 0
     // Resetting the height collapses the box and clamps scroll positions to zero. The
     // visible scroller is usually the outer container (the textarea itself only grows),
     // so save and restore BOTH — otherwise typing yanks the view back to the top.
@@ -284,7 +291,13 @@ $effect(() => {
   if (!sc) return
   const ro = new ResizeObserver(() => fitEditor())
   ro.observe(sc)
-  return () => ro.disconnect()
+  return () => {
+    ro.disconnect()
+    if (fitRaf) {
+      cancelAnimationFrame(fitRaf)
+      fitRaf = 0
+    }
+  }
 })
 
 function handleInput(e: Event) {

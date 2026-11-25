@@ -68,10 +68,10 @@
     onOpenCustom: () => void;
     onOpenInstruct: () => void;
     onStop: () => void;
-    /** Reply-length setting in tokens (top-bar slider, left of the selection ops). */
+    /** Reply-length setting in tokens (Generation section in the menu). */
     replyLength: number;
     onSetReplyLength: (tokens: number) => void;
-    /** Content rating for generated prose (top-bar slider, left of the reply length). */
+    /** Content rating for generated prose (Generation section in the menu). */
     rating: ContentRating;
     onSetRating: (rating: ContentRating) => void;
   } = $props();
@@ -156,18 +156,12 @@
     REPLY_LABELS[replyTokens] ??
       `${Math.round(replyLength).toLocaleString()} tokens`,
   );
-  /** Constant tooltip — the live value is shown right in the bar, so keep this static. */
-  const REPLY_TIP =
-    "Reply length — how long generated replies may be. A profile’s max-token limit still applies.";
 
   // ---------- content-rating slider (0 = safe, 1 = suggestive, 2 = explicit) ----------
-  /** Live label for the selected rating stop (shown right in the bar). */
+  /** Live label for the selected rating stop. */
   const ratingLabel = $derived(
     RATING_LEVELS.find((r) => r.id === clampRating(rating))?.label ?? "SFW",
   );
-  /** Constant tooltip — the live value is shown right in the bar, so keep this static. */
-  const RATING_TIP =
-    "Content rating — how explicit generated scenes may be: safe, suggestive, or explicit.";
 </script>
 
 <!-- min-h + flex-wrap (not a fixed h) so narrow viewports wrap to a second row instead of clipping controls. -->
@@ -187,7 +181,7 @@
     {#if menuOpen}
       <div
         role="menu"
-        class="absolute left-0 top-full z-50 mt-1 max-h-[calc(100dvh-4rem)] w-72 overflow-y-auto rounded-xl border border-base-300 bg-base-200 py-1 shadow-lg"
+        class="absolute left-0 top-full z-50 mt-1 max-h-[calc(100dvh-4rem)] w-80 max-w-[calc(100vw-1.5rem)] overflow-y-auto rounded-xl border border-base-300 bg-base-200 py-1 shadow-lg"
       >
         <button
           role="menuitem"
@@ -214,7 +208,6 @@
         </button>
 
         {#if hasDoc}
-          <!-- Generation settings live here on narrow screens, where the top bar hides its sliders. -->
           <div class="my-1 border-t border-base-300"></div>
           <span
             class="block px-3 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wider opacity-40"
@@ -222,11 +215,11 @@
           >
           <label class="block px-3 py-1.5">
             <span class="flex items-center justify-between gap-2 text-sm">
-              <span class="flex items-center gap-2.5"
-                ><i class="fa-solid fa-gauge-high w-3 text-center opacity-70"
+              <span class="flex shrink-0 items-center gap-2.5 whitespace-nowrap"
+                ><i class="fa-solid fa-gauge-high w-4 text-center opacity-70"
                 ></i>Content rating</span
               >
-              <span class="text-xs opacity-60">{ratingLabel}</span>
+              <span class="whitespace-nowrap text-xs opacity-60">{ratingLabel}</span>
             </span>
             <input
               type="range"
@@ -244,12 +237,12 @@
           </label>
           <label class="block px-3 py-1.5">
             <span class="flex items-center justify-between gap-2 text-sm">
-              <span class="flex items-center gap-2.5"
+              <span class="flex shrink-0 items-center gap-2.5 whitespace-nowrap"
                 ><i
                   class="fa-solid fa-ruler-horizontal w-4 text-center opacity-70"
                 ></i>Reply length</span
               >
-              <span class="text-xs tabular-nums opacity-60"
+              <span class="whitespace-nowrap text-xs tabular-nums opacity-60"
                 >{replyTokens.toLocaleString()} tokens · {replyLabel}</span
               >
             </span>
@@ -507,72 +500,10 @@
       <span class="hidden whitespace-nowrap text-xs opacity-50 lg:inline"
         >{selection.words} words selected</span
       >
+      <span class="hidden h-5 w-px shrink-0 bg-base-300 lg:block"></span>
     {/if}
 
-    <!-- Content rating: how explicit generated scenes may be (left of the reply length). Hidden below md — moves to the menu. -->
-    <span class="hidden h-5 w-px shrink-0 bg-base-300 md:block"></span>
-    <label
-      class="hidden items-center gap-1.5 md:flex"
-      data-tip={RATING_TIP}
-      data-tip-pos="down"
-    >
-      <i class="fa-solid fa-gauge-high text-xs opacity-50" aria-hidden="true"
-      ></i>
-      <input
-        type="range"
-        min={0}
-        max={2}
-        step={1}
-        value={rating}
-        oninput={(e) =>
-          onSetRating(
-            clampRating(Number((e.target as HTMLInputElement).value)),
-          )}
-        class="range range-primary range-xs w-20 sm:w-24"
-        aria-label="Content rating"
-      />
-      <!-- Fixed to fit "Suggestive" (the longest label) so the bar never reflows while dragging -->
-      <span
-        class="w-16 whitespace-nowrap text-left text-[11px] leading-tight opacity-60"
-        >{ratingLabel}</span
-      >
-    </label>
-
-    <!-- Reply length: caps how long a generated reply may be (left of the selection ops). Hidden below md — moves to the menu. -->
-    <span class="hidden h-5 w-px shrink-0 bg-base-300 md:block"></span>
-    <label
-      class="hidden items-center gap-1.5 md:flex"
-      data-tip={REPLY_TIP}
-      data-tip-pos="down"
-    >
-      <i
-        class="fa-solid fa-ruler-horizontal text-xs opacity-50"
-        aria-hidden="true"
-      ></i>
-      <input
-        type="range"
-        min={REPLY_MIN_EXP}
-        max={REPLY_MAX_EXP}
-        step={1}
-        value={replyExp}
-        oninput={(e) =>
-          onSetReplyLength(2 ** Number((e.target as HTMLInputElement).value))}
-        class="range range-primary range-xs w-20 sm:w-28"
-        aria-label="Reply length"
-      />
-      <!-- Fixed widths so the bar never reflows while dragging -->
-      <span
-        class="w-9 whitespace-nowrap text-right text-[11px] leading-tight tabular-nums opacity-60"
-        >{replyTokens.toLocaleString()}</span
-      >
-      <span
-        class="hidden w-[7rem] whitespace-nowrap text-left text-[11px] leading-tight opacity-60 md:inline"
-        >({replyLabel})</span
-      >
-    </label>
-
     <!-- Selection operations: always visible, disabled until a passage is selected -->
-    <span class="h-5 w-px shrink-0 bg-base-300"></span>
     <div
       class="flex items-center gap-1"
       role="toolbar"

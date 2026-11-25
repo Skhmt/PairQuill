@@ -15,11 +15,32 @@ interface StreamCallbacks {
   onUsage?: (usage: { prompt_tokens?: number; completion_tokens?: number }) => void
 }
 
+function isLocalHost(hostAndPath: string): boolean {
+  const authority = hostAndPath.split('/')[0].toLowerCase()
+  const host = authority.startsWith('[')
+    ? authority.slice(1, authority.indexOf(']') > 0 ? authority.indexOf(']') : undefined)
+    : authority.split(':')[0]
+  if (host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '0.0.0.0' || host.endsWith('.local')) {
+    return true
+  }
+  const m = /^(\d{1,3})\.(\d{1,3})\.\d{1,3}\.\d{1,3}$/.exec(host)
+  if (!m) return false
+  const a = Number(m[1])
+  const b = Number(m[2])
+  return a === 10 || (a === 192 && b === 168) || (a === 172 && b >= 16 && b <= 31)
+}
+
 function normalizeBaseUrl(base: string): string {
   let u = base.trim().replace(/\/+$/, '')
   if (!u) return ''
-  if (!/^https?:\/\//i.test(u)) {
-    u = `http://${u}`
+  const schemeMatch = /^([a-z][a-z0-9+.-]*):\/\//i.exec(u)
+  if (schemeMatch) {
+    const scheme = schemeMatch[1].toLowerCase()
+    if (scheme !== 'http' && scheme !== 'https') {
+      throw new Error(`Unsupported URL scheme "${scheme}://" — only http:// and https:// are allowed.`)
+    }
+  } else {
+    u = `${isLocalHost(u) ? 'http' : 'https'}://${u}`
   }
   // The Base URL field implies a /v1 root (the input shows a "/v1" suffix), but
   // tolerate URLs that already include it.

@@ -84,6 +84,45 @@ const replyCap = $derived(effectiveMaxTokens(activeProfile, settings.replyLength
 /** Content rating from the top-bar slider, clamped so hand-edited settings stay valid. */
 const rating = $derived(clampRating(settings.rating))
 
+/**
+ * Debounced/throttled story content used for word-count and context-budget estimates
+ * so typing and 60ms streaming flushes don't re-scan the entire story on every frame.
+ */
+let measuredContent = $state('')
+let lastMeasuredDocId: string | null = null
+let wasGenerating = false
+
+$effect(() => {
+  const d = activeDoc
+  const content = d?.content ?? ''
+  const docId = d?.id ?? null
+  const generating = genStats.active
+
+  if (!d) {
+    measuredContent = ''
+    lastMeasuredDocId = null
+    wasGenerating = false
+    return
+  }
+
+  // Update immediately when switching docs, finishing a generation, or opening ContextModal.
+  if (docId !== lastMeasuredDocId || (wasGenerating && !generating) || contextOpen) {
+    lastMeasuredDocId = docId
+    wasGenerating = generating
+    measuredContent = content
+    return
+  }
+
+  wasGenerating = generating
+  const delay = generating ? 500 : 250
+  const t = setTimeout(() => {
+    measuredContent = content
+  }, delay)
+  return () => clearTimeout(t)
+})
+
+const activeWordCount = $derived(activeDoc ? wordCount(measuredContent) : 0)
+
 /** Approximate token budget for the active doc, shown in the Context tab. */
 const budget = $derived.by((): BudgetBreakdown | null => {
   const d = activeDoc
@@ -95,7 +134,7 @@ const budget = $derived.by((): BudgetBreakdown | null => {
     worldText: worldText(d),
     characterText: characterText(d),
     toneText: d.tone,
-    storyContent: d.content,
+    storyContent: measuredContent,
     reserveTokens: replyCap,
   })
   return {
@@ -104,7 +143,7 @@ const budget = $derived.by((): BudgetBreakdown | null => {
     characterTokens: b.characterTokens,
     storyTokens: b.storyTokens,
     reserveTokens: b.reserveTokens,
-    storyTrimmed: b.fitsStoryChars < d.content.length,
+    storyTrimmed: b.fitsStoryChars < measuredContent.length,
   }
 })
 
@@ -121,6 +160,7 @@ async function loadAll() {
       idbGetAll<GenerationRecord>('generations'),
     ])
     docs = d.sort((a, b) => b.updatedAt - a.updatedAt)
+    for (const doc of docs) savedDocVersions.set(doc.id, doc.updatedAt)
     profiles = p
     const saved = s[0]
     if (saved) {
@@ -140,6 +180,13 @@ async function loadAll() {
 void loadAll()
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null
+const savedDocVersions = new Map<string, number>()
+const dirtyDocIds = new Set<string>()
+const deletedDocIds = new Set<string>()
+let profilesDirty = false
+let settingsDirty = false
+let generationsDirty = false
+let skipInitialTrack = true
 
 /**
  * IndexedDB structured-clones every value it stores, and a live $state proxy is not
@@ -155,7 +202,7 @@ function plain<T>(value: T): T {
  * stories, profiles or generation records would reappear on the next reload.
  */
 async function syncStore(
-  store: 'documents' | 'profiles' | 'generations',
+  store: 'profiles' | 'generations',
   items: { id: string }[],
 ): Promise<void> {
   const keep = new Set(items.map((i) => i.id))
@@ -168,12 +215,57 @@ async function syncStore(
 }
 
 async function writeAll(): Promise<void> {
-  await Promise.all([
-    syncStore('documents', docs),
-    syncStore('profiles', profiles),
-    idbPut('settings', plain(settings), SETTINGS_KEY),
-    syncStore('generations', generations.slice(0, MAX_GENERATIONS)),
-  ])
+  const tasks: Promise<unknown>[] = []
+
+  if (dirtyDocIds.size > 0) {
+    const ids = Array.from(dirtyDocIds)
+    dirtyDocIds.clear()
+    const toPut: StoryDoc[] = []
+    for (const id of ids) {
+      const doc = docs.find((d) => d.id === id)
+      if (doc) {
+        toPut.push(plain(doc))
+        savedDocVersions.set(doc.id, doc.updatedAt)
+      }
+    }
+    if (toPut.length > 0) tasks.push(idbPutMany('documents', toPut))
+  }
+
+  if (deletedDocIds.size > 0) {
+    const toDelete = Array.from(deletedDocIds)
+    deletedDocIds.clear()
+    for (const id of toDelete) savedDocVersions.delete(id)
+    tasks.push(idbDeleteMany('documents', toDelete))
+  }
+
+  if (profilesDirty) {
+    profilesDirty = false
+    tasks.push(syncStore('profiles', profiles))
+  }
+
+  if (settingsDirty) {
+    settingsDirty = false
+    tasks.push(idbPut('settings', plain(settings), SETTINGS_KEY))
+  }
+
+  if (generationsDirty) {
+    generationsDirty = false
+    tasks.push(syncStore('generations', generations.slice(0, MAX_GENERATIONS)))
+  }
+
+  if (tasks.length > 0) await Promise.all(tasks)
+}
+
+function scheduleSave(): void {
+  if (saveTimer) clearTimeout(saveTimer)
+  saveTimer = setTimeout(async () => {
+    saveTimer = null
+    try {
+      await writeAll()
+    } catch {
+      showToast('Could not save to browser storage.', 'error')
+    }
+  }, 800)
 }
 
 /**
@@ -193,21 +285,66 @@ function touch(value: unknown): void {
   }
 }
 
+// Track activeDoc deeply (so typing/world edits save promptly without traversing inactive docs).
+$effect(() => {
+  if (!loaded || !activeDoc) return
+  touch(activeDoc)
+  if (skipInitialTrack) return
+  dirtyDocIds.add(activeDoc.id)
+  deletedDocIds.delete(activeDoc.id)
+  scheduleSave()
+})
+
+// Track doc list additions, deletions, and shallow metadata edits (e.g. renaming inactive docs).
 $effect(() => {
   if (!loaded) return
-  // read every persisted leaf so any nested mutation re-runs this effect
-  touch(docs)
-  touch(profiles)
-  touch(settings)
-  void generations.length // generations are append-only; length subscription avoids traversing prompt trees
-  if (saveTimer) clearTimeout(saveTimer)
-  saveTimer = setTimeout(async () => {
-    try {
-      await writeAll()
-    } catch {
-      showToast('Could not save to browser storage.', 'error')
+  const currentIds = new Set<string>()
+  let changed = false
+  for (const d of docs) {
+    currentIds.add(d.id)
+    void d.title
+    if (savedDocVersions.get(d.id) !== d.updatedAt) {
+      dirtyDocIds.add(d.id)
+      deletedDocIds.delete(d.id)
+      changed = true
     }
-  }, 800)
+  }
+  for (const id of savedDocVersions.keys()) {
+    if (!currentIds.has(id)) {
+      deletedDocIds.add(id)
+      dirtyDocIds.delete(id)
+      changed = true
+    }
+  }
+  if (changed && !skipInitialTrack) scheduleSave()
+})
+
+$effect(() => {
+  if (!loaded) return
+  touch(profiles)
+  if (skipInitialTrack) return
+  profilesDirty = true
+  scheduleSave()
+})
+
+$effect(() => {
+  if (!loaded) return
+  touch(settings)
+  if (skipInitialTrack) return
+  settingsDirty = true
+  scheduleSave()
+})
+
+$effect(() => {
+  if (!loaded) return
+  void generations.length
+  void generations[0]?.id
+  if (skipInitialTrack) {
+    skipInitialTrack = false
+    return
+  }
+  generationsDirty = true
+  scheduleSave()
 })
 
 // Flush a pending debounced write when the tab is hidden/closed so a quick reload
@@ -600,7 +737,7 @@ $effect(() => {
   </div>
 
   <StatusBar
-    words={activeDoc ? wordCount(activeDoc.content) : 0}
+    words={activeWordCount}
     budget={budget}
     maxContext={maxContext}
     exceedsModel={contextExceedsModel}
