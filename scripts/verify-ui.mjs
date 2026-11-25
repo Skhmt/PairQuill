@@ -249,12 +249,41 @@ try {
   await renameInput.fill('The Lighthouse Keeper')
   await renameInput.press('Enter')
   check('T3 rename: committed title shown in list', (await dlg.getByText('The Lighthouse Keeper').count()) >= 1)
+  // The explicit pencil button reopens inline editing; Escape cancels it without closing the modal.
+  await dlg.locator('button[title="Rename story"]').first().click()
+  check('T3 rename: pencil button reopens the input', (await renameInput.count()) === 1)
+  await renameInput.fill('A Different Title')
+  await renameInput.press('Escape')
+  check(
+    'T3 rename: Escape cancels and keeps the modal open',
+    (await dlg.getByText('The Lighthouse Keeper').count()) >= 1 &&
+      (await dlg.getByText('A Different Title').count()) === 0 &&
+      (await storiesDlg().count()) === 1,
+  )
   await dlg.locator('button[title="Close"]').click()
 
-  // ---- T4: World modal — add a note ------------------------------------------
+  // ---- T4: World modal — tabs + add a note ------------------------------------
   await pickMenuItem('World')
   const worldDlg = () => page.locator('dialog[aria-label="World notes"][open]')
   check('T4 world: dialog opens', (await worldDlg().count()) === 1)
+  // Tone / World notes / Characters are now separate tabs; Tone is the default.
+  const toneTab = worldDlg().getByRole('tab', { name: /^Tone$/ })
+  const notesTab = worldDlg().getByRole('tab', { name: /World notes/ })
+  const charsTab = worldDlg().getByRole('tab', { name: /^Characters$/ })
+  check(
+    'T4 world: opens with Tone/Notes/Characters tabs, Tone active',
+    (await worldDlg().locator('[role="tab"]').count()) === 3 &&
+      (await toneTab.getAttribute('aria-selected')) === 'true' &&
+      (await worldDlg().locator('textarea[placeholder^="e.g. Third person limited"]').count()) === 1,
+  )
+  const boxW = await worldDlg().locator('.modal-box').evaluate((el) => el.getBoundingClientRect().width)
+  check('T4 world: modal is larger (max-w-3xl)', boxW >= 700, `w=${Math.round(boxW)}`)
+  await notesTab.click()
+  check(
+    'T4 world: World-notes tab shows the note list',
+    (await notesTab.getAttribute('aria-selected')) === 'true' &&
+      (await worldDlg().locator('button[title="Add world note"]').count()) === 1,
+  )
   await worldDlg().locator('button[title="Add world note"]').click()
   // New notes render as daisyUI collapses and start collapsed. The closed state is
   // expressed via content-visibility:hidden on .collapse-content (the box keeps its
@@ -269,6 +298,18 @@ try {
   await worldDlg().locator('textarea[placeholder^="Details the model should know"]').first().fill('A small harbor where the story begins; storms come from the west.')
   await page.waitForTimeout(200)
   check('T4 world: note listed', (await worldDlg().getByText('The Bay').count()) >= 1)
+  check('T4 world: notes tab badge shows the count', (await notesTab.innerText()).includes('1'))
+  await charsTab.click()
+  check(
+    'T4 world: Characters tab shows its empty state + add button',
+    (await worldDlg().getByText('No characters yet.').count()) === 1 &&
+      (await worldDlg().locator('button[title="Add character"]').count()) === 1,
+  )
+  await toneTab.click()
+  check(
+    'T4 world: Tone tab still shows the tone editor',
+    (await worldDlg().locator('textarea[placeholder^="e.g. Third person limited"]').count()) === 1,
+  )
   await worldDlg().locator('button[title="Close"]').click()
 
   // ---- T5: Context modal from the status bar ---------------------------------
@@ -389,8 +430,10 @@ try {
   check('T8 import: toast reported', (await page.getByText(/Imported 1 story/).count()) >= 1)
   await dlg8.locator('button[title="Close"]').click()
   await pickMenuItem('World')
-  check('T8 import: world data restored on active story', (await page.locator('dialog[open]').getByText('The Bay').count()) >= 1)
-  await page.locator('dialog[open]').locator('button[title="Close"]').click()
+  const worldDlg8 = page.locator('dialog[open]')
+  await worldDlg8.getByRole('tab', { name: /World notes/ }).click() // notes are on their own tab now
+  check('T8 import: world data restored on active story', (await worldDlg8.getByText('The Bay').count()) >= 1)
+  await worldDlg8.locator('button[title="Close"]').click()
 
   // ---- T9: Stories modal — delete with styled confirm -------------------------
   await pickMenuItem('Stories')
@@ -450,6 +493,16 @@ try {
   check(
     'T11 server modal: opens with the seeded profile',
     (await dlg11.getByText('Servers & models').count()) === 1,
+  )
+  // Two-pane layout: wider box, and the profile list lives on the left of the editor.
+  const sBoxW = await dlg11.locator('.modal-box').evaluate((el) => el.getBoundingClientRect().width)
+  check('T11 server modal: wider two-pane layout (max-w-4xl)', sBoxW >= 850, `w=${Math.round(sBoxW)}`)
+  const listX = await dlg11.locator('[data-server-list]').evaluate((el) => el.getBoundingClientRect().x)
+  const editorX = await dlg11.locator('[data-profile-editor]').evaluate((el) => el.getBoundingClientRect().x)
+  check(
+    'T11 server modal: profile list sits to the left of the editor',
+    (await dlg11.locator('[data-server-list] .fa-circle-dot').count()) === 1 && listX < editorX,
+    `list.x=${Math.round(listX)} editor.x=${Math.round(editorX)}`,
   )
   // Refresh must actually fetch and report back inline (run while the seeded mock profile is active)
   const refreshBtn = dlg11.locator('label[data-model-combo] button[title="Refresh model list only"]')

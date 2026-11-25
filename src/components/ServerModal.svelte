@@ -245,7 +245,7 @@
 </script>
 
 <dialog class="modal" bind:this={dlg} onclose={onClose}>
-  <div class="modal-box w-full max-w-2xl" bind:this={boxEl}>
+  <div class="modal-box w-full max-w-4xl" bind:this={boxEl}>
     <div class="mb-3 flex items-center justify-between">
       <h3 class="text-lg font-semibold">
         <i class="fa-solid fa-server mr-2 text-primary"></i>Servers &amp; models
@@ -255,49 +255,64 @@
       >
     </div>
 
-    <p class="mb-2 text-xs opacity-60">
-      Any OpenAI-compatible endpoint works (Ollama, LM Studio, vLLM, llama.cpp
-      server…). The base URL is the root of the
-      <code class="rounded bg-base-300 px-1">/v1</code> API.
-    </p>
-
-    <div class="mb-4 max-h-48 space-y-1.5 overflow-y-auto pr-1">
-      {#each profiles as p (p.id)}
-        {@const active = p.id === activeProfileId}
-        <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-        <div
-          class={`flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 transition-colors ${active ? "border-primary bg-primary/10" : "border-base-300 hover:bg-base-200"}`}
-          onclick={() => onSelect(p.id)}
-        >
-          <i
-            class={`fa-solid ${active ? "fa-circle-dot text-primary" : "fa-circle opacity-40"}`}
-          ></i>
-          <div class="min-w-0 flex-1">
-            <span class="block truncate text-sm font-medium">{p.name}</span>
-            <span class="block truncate text-xs opacity-60"
-              >{p.baseUrl || "no URL"}{p.modelId ? ` → ${p.modelId}` : ""}</span
-            >
-          </div>
-          <button
-            class="btn btn-ghost btn-xs text-error hover:bg-error/10"
-            title="Delete profile"
-            onclick={(e) => {
-              e.stopPropagation();
-              onDelete(p);
-            }}
+    <!-- Two panes: the profile list on the left, the editor for the active
+         profile on the right — wider than before so neither has to stack. -->
+    <div class="flex items-stretch gap-4">
+      <div class="flex w-64 shrink-0 flex-col sm:w-72" data-server-list>
+        <span class="label pb-1 text-xs opacity-70">Servers</span>
+        <div class="min-h-[96px] flex-1 space-y-1.5 overflow-y-auto pr-1">
+        {#each profiles as p (p.id)}
+          {@const active = p.id === activeProfileId}
+          <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+          <div
+            class={`flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 transition-colors ${active ? "border-primary bg-primary/10" : "border-base-300 hover:bg-base-200"}`}
+            onclick={() => onSelect(p.id)}
           >
-            <i class="fa-solid fa-trash"></i>
-          </button>
+            <i
+              class={`fa-solid ${active ? "fa-circle-dot text-primary" : "fa-circle opacity-40"}`}
+            ></i>
+            <div class="min-w-0 flex-1">
+              <span class="block truncate text-sm font-medium">{p.name}</span>
+              <span class="block truncate text-xs opacity-60"
+                >{p.baseUrl || "no URL"}{p.modelId ? ` → ${p.modelId}` : ""}</span
+              >
+            </div>
+            <button
+              class="btn btn-ghost btn-xs text-error hover:bg-error/10"
+              title="Delete profile"
+              onclick={(e) => {
+                e.stopPropagation();
+                onDelete(p);
+              }}
+            >
+              <i class="fa-solid fa-trash"></i>
+            </button>
+          </div>
+        {:else}
+          <p
+            class="rounded-xl border border-dashed border-base-300 px-3 py-4 text-center text-xs opacity-50"
+          >
+            No server profiles yet.
+          </p>
+        {/each}
         </div>
-      {:else}
-        <p
-          class="rounded-xl border border-dashed border-base-300 px-3 py-4 text-center text-xs opacity-50"
+        <button
+          class="btn btn-sm mt-2 w-full"
+          title="Create a new profile"
+          onclick={onAdd}
         >
-          No server profiles yet.
+          <i class="fa-solid fa-plus mr-2"></i>New
+        </button>
+      </div>
+
+      <div class="min-w-0 flex-1" data-profile-editor>
+        <p class="mb-2 text-xs opacity-60">
+          Any OpenAI-compatible endpoint works (Ollama, LM Studio, vLLM, llama.cpp
+          server…). The base URL is the root of the
+          <code class="rounded bg-base-300 px-1">/v1</code> API.
         </p>
-      {/each}
-    </div>
-    <div class="rounded-xl border border-base-300 bg-base-200/50 p-3">
+
+        <div class="rounded-xl border border-base-300 bg-base-200/50 p-3">
       <h4 class="mb-2 text-sm font-semibold">
         {profile ? `Editing: ${profile.name}` : "New profile"}
       </h4>
@@ -507,15 +522,11 @@
         </div>
       {:else}
         <p class="py-2 text-center text-xs opacity-50">
-          No profile selected — click “New” below to add one.
+          No profile selected — click “New” in the list panel to add one.
         </p>
       {/if}
-    </div>
-
-    <div class="modal-action">
-      <button class="btn" title="Create a new profile" onclick={onAdd}>
-        <i class="fa-solid fa-plus mr-2"></i>New
-      </button>
+        </div>
+      </div>
     </div>
   </div>
   <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->

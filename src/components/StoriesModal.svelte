@@ -30,10 +30,13 @@ $effect(() => {
   if (dlg && dlg.open !== open) (open ? dlg.showModal() : dlg.close())
 })
 
-/** Double-click a title to rename it inline; Enter/blur commits, Esc cancels. */
+/** Rename via the pencil button or by double-clicking a title — inline input; Enter/blur commits, Esc cancels. */
 let editingId = $state<string | null>(null)
 let renameDraft = $state('')
 let renameInput: HTMLInputElement | undefined = $state()
+/** Set when Escape cancels a rename so the dialog's native `cancel` (Esc closes showModal
+ *  dialogs) is suppressed for that one press — the modal itself stays open. */
+let suppressCancel = false
 $effect(() => {
   // Programmatic focus (Svelte 5 warns against the `autofocus` attribute).
   if (editingId && renameInput) {
@@ -45,6 +48,7 @@ $effect(() => {
   if (!open) {
     editingId = null
     renameDraft = ''
+    suppressCancel = false
     if (openTimer) {
       clearTimeout(openTimer)
       openTimer = null
@@ -83,9 +87,17 @@ function commitRename() {
   }
   editingId = null
 }
+
+/** Esc while renaming cancels the rename only; natively it would close the whole modal. */
+function onCancel(e: Event) {
+  if (suppressCancel) {
+    e.preventDefault()
+    suppressCancel = false
+  }
+}
 </script>
 
-<dialog class="modal" aria-label="Stories" bind:this={dlg} onclose={onClose}>
+<dialog class="modal" aria-label="Stories" bind:this={dlg} onclose={onClose} oncancel={onCancel}>
   <div class="modal-box max-h-[80vh] w-full max-w-lg overflow-hidden">
     <div class="mb-3 flex shrink-0 items-center gap-2">
       <h3 class="text-lg font-bold"><i class="fa-solid fa-book-open mr-2 text-primary"></i>Stories</h3>
@@ -124,7 +136,10 @@ function commitRename() {
                   bind:this={renameInput}
                   onkeydown={(e) => {
                     if (e.key === 'Enter') commitRename()
-                    else if (e.key === 'Escape') editingId = null
+                    else if (e.key === 'Escape') {
+                      suppressCancel = true // Esc cancels the rename, not the modal
+                      editingId = null
+                    }
                   }}
                   onblur={commitRename}
                 />
@@ -141,6 +156,13 @@ function commitRename() {
                   </span>
                 </button>
               {/if}
+              <button
+                class="btn btn-ghost btn-xs shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
+                title="Rename story"
+                onclick={() => startRename(doc.id, doc.title)}
+              >
+                <i class="fa-solid fa-pen"></i>
+              </button>
               <button
                 class="btn btn-ghost btn-xs shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
                 title="Export as .txt"
