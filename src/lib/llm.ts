@@ -99,10 +99,12 @@ export async function chatStream(
   if (stops.length > 0) body.stop = stops
 
   const endpoint = `${normalizeBaseUrl(baseUrl)}/chat/completions`
-  console.groupCollapsed(`[LLM] → Request (${model})`)
-  console.log('Endpoint:', endpoint)
-  console.log('Payload:', body)
-  console.groupEnd()
+  if (import.meta.env.DEV) {
+    console.groupCollapsed(`[LLM] → Request (${model})`)
+    console.log('Endpoint:', endpoint)
+    console.log('Payload:', body)
+    console.groupEnd()
+  }
 
   const res = await fetch(endpoint, {
     method: 'POST',
@@ -116,7 +118,9 @@ export async function chatStream(
     // Keep a generous slice of the server's error body — rate-limit and quota
     // messages are long, and the UI now shows them in a wrapping box.
     const errText = (await safeText(res)).slice(0, 1000)
-    console.error(`[LLM] ← Error (${model}): HTTP ${res.status}`, errText)
+    if (import.meta.env.DEV) {
+      console.error(`[LLM] ← Error (${model}): HTTP ${res.status}`, errText)
+    }
     throw new Error(`HTTP ${res.status}: ${errText}`)
   }
 
@@ -151,12 +155,14 @@ export async function chatStream(
         full += delta
         cb.onToken(delta)
       }
-      const rc = choice?.delta?.reasoning_content
-      if (typeof rc === 'string' && rc.length > 0) {
-        reasoning += rc
-      }
-      if (typeof choice?.finish_reason === 'string' && choice.finish_reason) {
-        finishReason = choice.finish_reason
+      if (import.meta.env.DEV) {
+        const rc = choice?.delta?.reasoning_content
+        if (typeof rc === 'string' && rc.length > 0) {
+          reasoning += rc
+        }
+        if (typeof choice?.finish_reason === 'string' && choice.finish_reason) {
+          finishReason = choice.finish_reason
+        }
       }
       if (json.usage) {
         promptTokens = json.usage.prompt_tokens ?? promptTokens
@@ -185,14 +191,16 @@ export async function chatStream(
     if (buf.trim()) handleLine(buf)
     return { text: full, promptTokens, completionTokens }
   } finally {
-    console.groupCollapsed(`[LLM] ← Response (${model})`)
-    console.log('Text:', full)
-    if (reasoning) console.log('Reasoning:', reasoning)
-    if (finishReason) console.log('Finish reason:', finishReason)
-    if (promptTokens !== undefined || completionTokens !== undefined) {
-      console.log('Usage:', { promptTokens, completionTokens })
+    if (import.meta.env.DEV) {
+      console.groupCollapsed(`[LLM] ← Response (${model})`)
+      console.log('Text:', full)
+      if (reasoning) console.log('Reasoning:', reasoning)
+      if (finishReason) console.log('Finish reason:', finishReason)
+      if (promptTokens !== undefined || completionTokens !== undefined) {
+        console.log('Usage:', { promptTokens, completionTokens })
+      }
+      console.groupEnd()
     }
-    console.groupEnd()
     try {
       reader.releaseLock()
     } catch {
