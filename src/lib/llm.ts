@@ -77,7 +77,13 @@ export async function chatStream(
   const stops = Array.isArray(params.stopSequences) ? params.stopSequences : []
   if (stops.length > 0) body.stop = stops
 
-  const res = await fetch(`${normalizeBaseUrl(baseUrl)}/chat/completions`, {
+  const endpoint = `${normalizeBaseUrl(baseUrl)}/chat/completions`
+  console.groupCollapsed(`[LLM] → Request (${model})`)
+  console.log('Endpoint:', endpoint)
+  console.log('Payload:', body)
+  console.groupEnd()
+
+  const res = await fetch(endpoint, {
     method: 'POST',
     headers: authHeaders(apiKey),
     referrerPolicy: 'no-referrer',
@@ -88,13 +94,17 @@ export async function chatStream(
   if (!res.ok || !res.body) {
     // Keep a generous slice of the server's error body — rate-limit and quota
     // messages are long, and the UI now shows them in a wrapping box.
-    throw new Error(`HTTP ${res.status}: ${(await safeText(res)).slice(0, 1000)}`)
+    const errText = (await safeText(res)).slice(0, 1000)
+    console.error(`[LLM] ← Error (${model}): HTTP ${res.status}`, errText)
+    throw new Error(`HTTP ${res.status}: ${errText}`)
   }
 
   const reader = res.body.getReader()
   const decoder = new TextDecoder()
   let buf = ''
   let full = ''
+  let reasoning = ''
+  let finishReason: string | undefined
   let promptTokens: number | undefined
   let completionTokens: number | undefined
 
@@ -106,15 +116,26 @@ export async function chatStream(
     if (payload === '[DONE]') return true
     try {
       const json = JSON.parse(payload) as {
-        choices?: Array<{ delta?: { content?: unknown; reasoning_content?: unknown } }>
+        choices?: Array<{
+          delta?: { content?: unknown; reasoning_content?: unknown }
+          finish_reason?: unknown
+        }>
         usage?: { prompt_tokens?: number; completion_tokens?: number }
       }
+      const choice = json.choices?.[0]
       // Only visible text goes into the document — thinking models may also stream
-      // `reasoning_content`, which we deliberately ignore.
-      const delta = json.choices?.[0]?.delta?.content
+      // `reasoning_content`, which we log to the console for debugging.
+      const delta = choice?.delta?.content
       if (typeof delta === 'string' && delta.length > 0) {
         full += delta
         cb.onToken(delta)
+      }
+      const rc = choice?.delta?.reasoning_content
+      if (typeof rc === 'string' && rc.length > 0) {
+        reasoning += rc
+      }
+      if (typeof choice?.finish_reason === 'string' && choice.finish_reason) {
+        finishReason = choice.finish_reason
       }
       if (json.usage) {
         promptTokens = json.usage.prompt_tokens ?? promptTokens
@@ -143,6 +164,14 @@ export async function chatStream(
     if (buf.trim()) handleLine(buf)
     return { text: full, promptTokens, completionTokens }
   } finally {
+    console.groupCollapsed(`[LLM] ← Response (${model})`)
+    console.log('Text:', full)
+    if (reasoning) console.log('Reasoning:', reasoning)
+    if (finishReason) console.log('Finish reason:', finishReason)
+    if (promptTokens !== undefined || completionTokens !== undefined) {
+      console.log('Usage:', { promptTokens, completionTokens })
+    }
+    console.groupEnd()
     try {
       reader.releaseLock()
     } catch {
