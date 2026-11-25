@@ -2,7 +2,7 @@
     "aggregator": [
         {
             "name": "AI Horde",
-            "url": "https://oai.aihorde.net/v1"
+            "url": "https://oai.aihorde.net/"
         },
         {
             "name": "Featherless",
@@ -38,7 +38,7 @@
     "frontier": [
         {
             "name": "Claude",
-            "url": "https://api.anthropic.com/v1/",
+            "url": "https://api.anthropic.com/",
             "api": "https://platform.claude.com/dashboard"
         },
         {
