@@ -24,9 +24,9 @@ export type ContentRating = 0 | 1 | 2
 
 /** The three content-rating stops of the top-bar slider, in order. */
 export const RATING_LEVELS: { id: ContentRating; label: string }[] = [
-  { id: 0, label: 'SFW' },
-  { id: 1, label: 'Romance / Softcore' },
-  { id: 2, label: 'Explicit / Hardcore' },
+  { id: 0, label: 'Safe' },
+  { id: 1, label: 'Suggestive' },
+  { id: 2, label: 'Explicit' },
 ]
 
 /** Clamp an arbitrary number to a valid content rating (guards hand-edited settings). */
