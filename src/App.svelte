@@ -788,7 +788,7 @@ $effect(() => {
       if (d) deleteDoc(d)
     }}
   />
-  <WorldModal open={worldOpen} onClose={() => (worldOpen = false)} doc={activeDoc} />
+  <WorldModal open={worldOpen} onClose={() => (worldOpen = false)} doc={activeDoc} onConfirm={askConfirm} />
   <ContextModal
     open={contextOpen}
     onClose={() => (contextOpen = false)}

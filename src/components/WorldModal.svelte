@@ -1,15 +1,17 @@
 <script lang="ts">
-import type { StoryDoc } from '../lib/types'
+import type { CharacterCard, StoryDoc, WorldNote } from '../lib/types'
 import { uid } from '../lib/format'
 
 let {
   open,
   onClose,
   doc,
+  onConfirm,
 }: {
   open: boolean
   onClose: () => void
   doc: StoryDoc | null
+  onConfirm: (title: string, message: string, action: () => void, label?: string) => void
 } = $props()
 
 let dlg: HTMLDialogElement | undefined = $state()
@@ -26,20 +28,38 @@ function addNote() {
   doc.worldNotes.push({ id: uid(), title: '', content: '' })
   doc.updatedAt = Date.now()
 }
-function removeNote(id: string) {
+function removeNote(note: WorldNote) {
   if (!doc) return
-  doc.worldNotes = doc.worldNotes.filter((n) => n.id !== id)
-  doc.updatedAt = Date.now()
+  const name = note.title.trim() || 'Untitled note'
+  onConfirm(
+    'Delete world note',
+    `Delete "${name}"? This cannot be undone.`,
+    () => {
+      if (!doc) return
+      doc.worldNotes = doc.worldNotes.filter((n) => n.id !== note.id)
+      doc.updatedAt = Date.now()
+    },
+    'Delete',
+  )
 }
 function addCharacter() {
   if (!doc) return
   doc.characters.push({ id: uid(), name: '', description: '' })
   doc.updatedAt = Date.now()
 }
-function removeCharacter(id: string) {
+function removeCharacter(ch: CharacterCard) {
   if (!doc) return
-  doc.characters = doc.characters.filter((c) => c.id !== id)
-  doc.updatedAt = Date.now()
+  const name = ch.name.trim() || 'Unnamed character'
+  onConfirm(
+    'Delete character',
+    `Delete "${name}"? This cannot be undone.`,
+    () => {
+      if (!doc) return
+      doc.characters = doc.characters.filter((c) => c.id !== ch.id)
+      doc.updatedAt = Date.now()
+    },
+    'Delete',
+  )
 }
 </script>
 
@@ -96,7 +116,7 @@ function removeCharacter(id: string) {
                     value={note.content}
                     oninput={(e) => { note.content = (e.target as HTMLTextAreaElement).value; doc.updatedAt = Date.now() }}
                   ></textarea>
-                  <button class="btn btn-ghost btn-xs text-error hover:bg-error/10" onclick={() => removeNote(note.id)}>
+                  <button class="btn btn-ghost btn-xs text-error hover:bg-error/10" onclick={() => removeNote(note)}>
                     <i class="fa-solid fa-trash"></i> Remove
                   </button>
                 </div>
@@ -129,7 +149,7 @@ function removeCharacter(id: string) {
                     value={ch.description}
                     oninput={(e) => { ch.description = (e.target as HTMLTextAreaElement).value; doc.updatedAt = Date.now() }}
                   ></textarea>
-                  <button class="btn btn-ghost btn-xs text-error hover:bg-error/10" onclick={() => removeCharacter(ch.id)}>
+                  <button class="btn btn-ghost btn-xs text-error hover:bg-error/10" onclick={() => removeCharacter(ch)}>
                     <i class="fa-solid fa-trash"></i> Remove
                   </button>
                 </div>
