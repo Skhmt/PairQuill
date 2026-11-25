@@ -29,12 +29,17 @@
     profiles.find((p) => p.id === activeProfileId) ?? null,
   );
 
-  /** Common endpoints offered as one-click base-URL presets (manual entry always works too). */
-  const PRESET_SERVERS = serverList as {
-    name: string;
-    url: string;
-    api?: string;
-  }[];
+  /** One preset endpoint from src/config/servers.json. */
+  type PresetServer = { name: string; url: string; api?: string };
+
+  /** Categorized presets (src/config/servers.json) — rendered as optgroups in the Base URL dropdown. */
+  const SERVER_GROUPS: { label: string; servers: PresetServer[] }[] = [
+    { label: "Aggregator", servers: serverList.aggregator },
+    { label: "Frontier", servers: serverList.frontier },
+    { label: "Local", servers: serverList.local },
+  ];
+  /** Flat view of every preset, for URL lookups (preset matching, API-key page). */
+  const PRESET_SERVERS = SERVER_GROUPS.flatMap((g) => g.servers);
 
   /** The preset matching the current base URL — "" means a custom/manual URL. */
   const presetUrl = $derived(
@@ -319,9 +324,16 @@
               onchange={(e) =>
                 pickPreset((e.target as HTMLSelectElement).value)}
             >
-              <option value="">Custom…</option>
-              {#each PRESET_SERVERS as p (p.url)}
-                <option value={p.url}>{p.name}</option>
+              <!-- "Custom…" stays on top in its own group; presets follow, grouped by category -->
+              <optgroup label="Custom">
+                <option value="">Custom…</option>
+              </optgroup>
+              {#each SERVER_GROUPS as group (group.label)}
+                <optgroup label={group.label}>
+                  {#each group.servers as p (p.url)}
+                    <option value={p.url}>{p.name}</option>
+                  {/each}
+                </optgroup>
               {/each}
             </select>
             <div class="input input-bordered input-sm mt-1">

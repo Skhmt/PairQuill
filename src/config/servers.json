@@ -1,61 +1,77 @@
-[
-    {
-        "name": "AI Horde",
-        "url": "https://oai.aihorde.net/v1"
-    },
-    {
-        "name": "Claude",
-        "url": "https://api.anthropic.com/v1/",
-        "api": "https://platform.claude.com/dashboard"
-    },
-    {
-        "name": "Featherless",
-        "url": "https://api.featherless.ai",
-        "api": "https://featherless.ai/account/api-keys"
-    },
-    {
-        "name": "Gemini",
-        "url": "https://generativelanguage.googleapis.com/v1beta/openai/",
-        "api": "https://aistudio.google.com/api-keys"
-    },
-    {
-        "name": "NanoGPT",
-        "url": "https://api.nano-gpt.com/api",
-        "api": "https://nano-gpt.com/api"
-    },
-    {
-        "name": "OpenAI",
-        "url": "https://api.openai.com",
-        "api": "https://platform.openai.com/home"
-    },
-    {
-        "name": "Openference",
-        "url": "https://api.openference.com",
-        "api": "https://openference.com/user/tokens"
-    },
-    {
-        "name": "OpenRouter",
-        "url": "https://openrouter.ai/api",
-        "api": "https://openrouter.ai/workspaces/default/keys"
-    },
-    {
-        "name": "Llama.cpp",
-        "url": "http://localhost:9931"
-    },
-    {
-        "name": "LM Studio",
-        "url": "http://localhost:3000"
-    },
-    {
-        "name": "Ollama",
-        "url": "http://localhost:11434"
-    },
-    {
-        "name": "Kobold.cpp",
-        "url": "http://localhost:5001"
-    },
-    {
-        "name": "Unsloth Desktop",
-        "url": "http://localhost:8888"
-    }
-]
+{
+    "aggregator": [
+        {
+            "name": "AI Horde",
+            "url": "https://oai.aihorde.net/v1"
+        },
+        {
+            "name": "Featherless",
+            "url": "https://api.featherless.ai",
+            "api": "https://featherless.ai/account/api-keys"
+        },
+        {
+            "name": "Groq",
+            "url": "https://api.groq.com/openai/",
+            "api": "https://console.groq.com/keys"
+        },
+        {
+            "name": "NanoGPT",
+            "url": "https://api.nano-gpt.com/api",
+            "api": "https://nano-gpt.com/api"
+        },
+        {
+            "name": "Openference",
+            "url": "https://api.openference.com",
+            "api": "https://openference.com/user/tokens"
+        },
+        {
+            "name": "OpenRouter",
+            "url": "https://openrouter.ai/api",
+            "api": "https://openrouter.ai/workspaces/default/keys"
+        },
+        {
+            "name": "Together.ai",
+            "url": "https://api.together.ai/",
+            "api": "https://api.together.ai/settings/profile"
+        }
+    ],
+    "frontier": [
+        {
+            "name": "Claude",
+            "url": "https://api.anthropic.com/v1/",
+            "api": "https://platform.claude.com/dashboard"
+        },
+        {
+            "name": "Gemini",
+            "url": "https://generativelanguage.googleapis.com/v1beta/openai/",
+            "api": "https://aistudio.google.com/api-keys"
+        },
+        {
+            "name": "OpenAI",
+            "url": "https://api.openai.com",
+            "api": "https://platform.openai.com/home"
+        }
+    ],
+    "local": [
+        {
+            "name": "Kobold.cpp",
+            "url": "http://localhost:5001"
+        },
+        {
+            "name": "Llama.cpp",
+            "url": "http://localhost:9931"
+        },
+        {
+            "name": "LM Studio",
+            "url": "http://localhost:3000"
+        },
+        {
+            "name": "Ollama",
+            "url": "http://localhost:11434"
+        },
+        {
+            "name": "Unsloth Desktop",
+            "url": "http://localhost:8888"
+        }
+    ]
+}
