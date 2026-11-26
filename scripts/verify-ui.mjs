@@ -205,47 +205,56 @@ try {
   )
 
   // ---- T2c: reply-length slider (top bar, left of the selection ops) ----------
+  // KNOWN-DRIFT (pre-existing, tracked separately): this slider now lives inside the
+  // hamburger menu, so the bare top-bar probe below finds nothing. The presence check
+  // records the drift as a FAIL; the rest is skipped so the suite reaches later sections
+  // instead of crashing on an unguarded boundingBox() timeout.
   const replySlider = page.locator('header input[type="range"][aria-label="Reply length"]')
+  const replySliderPresent = (await replySlider.count()) === 1
   check(
     'T2c slider: present with a doc, default ~1 page (2^10 = 1024 tokens)',
-    (await replySlider.count()) === 1 && (await replySlider.inputValue()) === '10',
+    replySliderPresent && (await replySlider.inputValue()) === '10',
   )
-  const sliderBox = await replySlider.boundingBox()
-  const expandBox = await page.locator('button[aria-label="Expand"]').boundingBox()
-  check(
-    'T2c slider: positioned to the left of the Expand button',
-    !!sliderBox && !!expandBox && sliderBox.x < expandBox.x,
-  )
-  await replySlider.focus()
-  await page.keyboard.press('ArrowLeft') // 1024 -> 512
-  await page.waitForTimeout(300)
-  check(
-    'T2c slider: stepping down updates the human-readable label',
-    (await replySlider.inputValue()) === '9' &&
-      (await page.locator('header').getByText('(a few paragraphs)', { exact: true }).count()) === 1,
-  )
-  const replyControl = page.locator('header label', { has: page.locator('input[type="range"][aria-label="Reply length"]') })
-  const replySpans = replyControl.locator('span')
-  const spanCount = await replySpans.count()
-  const spanTexts = []
-  for (let i = 0; i < spanCount; i++) spanTexts.push(await replySpans.nth(i).innerText())
-  check(
-    'T2c slider: shows the token count (512) before the description',
-    spanCount === 2 && spanTexts[0] === '512' && spanTexts[1] === '(a few paragraphs)',
-    `count=${spanCount} texts=${JSON.stringify(spanTexts)}`,
-  )
-  await page.keyboard.press('ArrowLeft') // 512 -> 256 ("a paragraph" — a different label width)
-  await page.waitForTimeout(300)
-  const sliderBoxAfter = await replySlider.boundingBox()
-  check(
-    'T2c slider: fixed-width label does not shift the slider while dragging',
-    !!sliderBox && !!sliderBoxAfter && sliderBox.x === sliderBoxAfter.x && sliderBox.width === sliderBoxAfter.width,
-  )
-  await page.waitForTimeout(1200) // let the debounced settings save flush
-  await page.reload()
-  await page.waitForSelector('footer')
-  await page.locator('header button:has-text("Continue")').waitFor({ timeout: 5000 })
-  check('T2c slider: choice persists after reload', (await replySlider.inputValue()) === '8')
+  if (!replySliderPresent) {
+    step('T2c: slider not in the top bar (moved to the hamburger menu) — skipping remaining T2c checks')
+  } else {
+    const sliderBox = await replySlider.boundingBox()
+    const expandBox = await page.locator('button[aria-label="Expand"]').boundingBox()
+    check(
+      'T2c slider: positioned to the left of the Expand button',
+      !!sliderBox && !!expandBox && sliderBox.x < expandBox.x,
+    )
+    await replySlider.focus()
+    await page.keyboard.press('ArrowLeft') // 1024 -> 512
+    await page.waitForTimeout(300)
+    check(
+      'T2c slider: stepping down updates the human-readable label',
+      (await replySlider.inputValue()) === '9' &&
+        (await page.locator('header').getByText('(a few paragraphs)', { exact: true }).count()) === 1,
+    )
+    const replyControl = page.locator('header label', { has: page.locator('input[type="range"][aria-label="Reply length"]') })
+    const replySpans = replyControl.locator('span')
+    const spanCount = await replySpans.count()
+    const spanTexts = []
+    for (let i = 0; i < spanCount; i++) spanTexts.push(await replySpans.nth(i).innerText())
+    check(
+      'T2c slider: shows the token count (512) before the description',
+      spanCount === 2 && spanTexts[0] === '512' && spanTexts[1] === '(a few paragraphs)',
+      `count=${spanCount} texts=${JSON.stringify(spanTexts)}`,
+    )
+    await page.keyboard.press('ArrowLeft') // 512 -> 256 ("a paragraph" — a different label width)
+    await page.waitForTimeout(300)
+    const sliderBoxAfter = await replySlider.boundingBox()
+    check(
+      'T2c slider: fixed-width label does not shift the slider while dragging',
+      !!sliderBox && !!sliderBoxAfter && sliderBox.x === sliderBoxAfter.x && sliderBox.width === sliderBoxAfter.width,
+    )
+    await page.waitForTimeout(1200) // let the debounced settings save flush
+    await page.reload()
+    await page.waitForSelector('footer')
+    await page.locator('header button:has-text("Continue")').waitFor({ timeout: 5000 })
+    check('T2c slider: choice persists after reload', (await replySlider.inputValue()) === '8')
+  }
 
   // ---- T3: Stories modal — inline rename ------------------------------------
   await ta.fill('The lighthouse keeper climbed the spiral stairs as the storm rolled in off the bay.\nShe lit the great lamp and watched the beam sweep the black water.')
@@ -412,66 +421,74 @@ try {
   check('T7c instruct: text actually grew', (await ta.inputValue()).length > lenBeforeInstr)
 
   // ---- T7d: content rating — slider guidance flows into every request ----------
+  // KNOWN-DRIFT (pre-existing, tracked separately): like T2c, the rating slider moved into
+  // the hamburger menu. The presence check records the drift as a FAIL; the rest is skipped
+  // so the suite continues instead of crashing on ratingSlider.focus().
   const ratingSlider = page.locator('input[type="range"][aria-label="Content rating"]')
+  const ratingSliderPresent = (await ratingSlider.count()) === 1
   check(
     'T7d rating: slider present with 3 stops (0..2), defaulting to SFW',
-    (await ratingSlider.count()) === 1 &&
+    ratingSliderPresent &&
       (await ratingSlider.getAttribute('min')) === '0' &&
       (await ratingSlider.getAttribute('max')) === '2' &&
       (await ratingSlider.inputValue()) === '0',
   )
-  check(
-    'T7d rating: SFW label shown in the bar',
-    (await page.locator('header').getByText('SFW', { exact: true }).count()) === 1,
-  )
-  const windCount = async () => (await ta.inputValue()).split(GENERATED).length - 1
-  await page.waitForTimeout(500) // let the last generation's stream fully commit before baselining
-  let expectedWind = await windCount() // one mock sentence per generation so far
-  const ratingPrompts = []
-  for (const [label, phrase] of [
-    ['SFW', 'safe for work'],
-    ['Romance / Softcore', 'softcore level'],
-    ['Explicit / Hardcore', 'Explicit content is permitted'],
-  ]) {
-    const target = label === 'SFW' ? 0 : label.startsWith('Romance') ? 1 : 2
-    await ratingSlider.focus()
-    while (Number(await ratingSlider.inputValue()) !== target) {
-      await page.keyboard.press(Number(await ratingSlider.inputValue()) < target ? 'ArrowRight' : 'ArrowLeft')
+  if (!ratingSliderPresent) {
+    step('T7d: rating slider not in the bar (moved to the hamburger menu) — skipping remaining T7d checks')
+  } else {
+    check(
+      'T7d rating: SFW label shown in the bar',
+      (await page.locator('header').getByText('SFW', { exact: true }).count()) === 1,
+    )
+    const windCount = async () => (await ta.inputValue()).split(GENERATED).length - 1
+    await page.waitForTimeout(500) // let the last generation's stream fully commit before baselining
+    let expectedWind = await windCount() // one mock sentence per generation so far
+    const ratingPrompts = []
+    for (const [label, phrase] of [
+      ['SFW', 'safe for work'],
+      ['Romance / Softcore', 'softcore level'],
+      ['Explicit / Hardcore', 'Explicit content is permitted'],
+    ]) {
+      const target = label === 'SFW' ? 0 : label.startsWith('Romance') ? 1 : 2
+      await ratingSlider.focus()
+      while (Number(await ratingSlider.inputValue()) !== target) {
+        await page.keyboard.press(Number(await ratingSlider.inputValue()) < target ? 'ArrowRight' : 'ArrowLeft')
+      }
+      check(
+        `T7d rating: bar label shows "${label}"`,
+        (await page.locator('header').getByText(label, { exact: true }).count()) === 1,
+      )
+      const prevBody = lastChatBody
+      await contBtn.click()
+      expectedWind++
+      // Node-side wait for the new request body to be captured, then page-side wait for
+      // the mock sentence to land in the editor; assert on the captured snapshot.
+      const deadline = Date.now() + 10_000
+      while (lastChatBody === prevBody && Date.now() < deadline) await page.waitForTimeout(50)
+      const body = lastChatBody
+      const sysPrompt = body?.messages?.[0]?.content ?? ''
+      ratingPrompts.push(sysPrompt)
+      const settled = await page
+        .waitForFunction(
+          // Playwright passes `arg` as a single value — destructure the [gen, n] pair.
+          ([gen, n]) => document.querySelector('textarea[placeholder^="Start writing"]').value.split(gen).length - 1 >= n,
+          [GENERATED, expectedWind],
+          { timeout: 10_000 },
+        )
+        .then(() => true)
+        .catch(() => false)
+      check(
+        `T7d rating: request at "${label}" carries its guidance`,
+        body !== prevBody && settled && sysPrompt.includes(`Content rating: ${label}`) && sysPrompt.includes(phrase),
+        `newBody=${body !== prevBody} settled=${settled} wind=${await windCount()} hasRatingBlock=${sysPrompt.includes('Content rating:')}`,
+      )
     }
     check(
-      `T7d rating: bar label shows "${label}"`,
-      (await page.locator('header').getByText(label, { exact: true }).count()) === 1,
-    )
-    const prevBody = lastChatBody
-    await contBtn.click()
-    expectedWind++
-    // Node-side wait for the new request body to be captured, then page-side wait for
-    // the mock sentence to land in the editor; assert on the captured snapshot.
-    const deadline = Date.now() + 10_000
-    while (lastChatBody === prevBody && Date.now() < deadline) await page.waitForTimeout(50)
-    const body = lastChatBody
-    const sysPrompt = body?.messages?.[0]?.content ?? ''
-    ratingPrompts.push(sysPrompt)
-    const settled = await page
-      .waitForFunction(
-        // Playwright passes `arg` as a single value — destructure the [gen, n] pair.
-        ([gen, n]) => document.querySelector('textarea[placeholder^="Start writing"]').value.split(gen).length - 1 >= n,
-        [GENERATED, expectedWind],
-        { timeout: 10_000 },
-      )
-      .then(() => true)
-      .catch(() => false)
-    check(
-      `T7d rating: request at "${label}" carries its guidance`,
-      body !== prevBody && settled && sysPrompt.includes(`Content rating: ${label}`) && sysPrompt.includes(phrase),
-      `newBody=${body !== prevBody} settled=${settled} wind=${await windCount()} hasRatingBlock=${sysPrompt.includes('Content rating:')}`,
+      'T7d rating: system prompt differs for every stop',
+      new Set(ratingPrompts).size === 3,
+      `unique=${new Set(ratingPrompts).size}`,
     )
   }
-  check(
-    'T7d rating: system prompt differs for every stop',
-    new Set(ratingPrompts).size === 3,
-    `unique=${new Set(ratingPrompts).size}`,
-  )
 
   // ---- T8: save current story (.json) + re-import it --------------------------
   const dlPath = path.join(os.tmpdir(), 'pairquill-verify-story.json')
@@ -593,7 +610,8 @@ try {
     /model/.test(noteText),
     JSON.stringify(noteText),
   )
-  // With the list open it can render upward over this label row — the button must stay on top of it
+  // The list opens upward over the fields above the input; the refresh button sits in the
+  // input row itself, so the topmost element at its center must still be the button
   const modelInput2 = dlg11.locator('input[placeholder="pick or type a model id"]')
   await modelInput2.click()
   await page.waitForTimeout(300)
@@ -659,10 +677,81 @@ try {
     (await keyLink.count()) === 0,
   )
   check(
-    'T11 server modal: refresh moved next to the Model ID label',
+    'T11 server modal: single refresh button in the model input row',
     (await dlg11.locator('button[title="Refresh model list only"]').count()) === 1 &&
       (await refreshBtn.count()) === 1,
   )
+  // --- cursor + overlap regressions for the refresh button living in the input row ---
+  const cursor11 = await refreshBtn.evaluate((b) => getComputedStyle(b).cursor)
+  check('T11 server modal: refresh button shows a pointer cursor', cursor11 === 'pointer', `cursor=${cursor11}`)
+  const inBox11 = await modelInput.boundingBox()
+  let btnBox11 = await refreshBtn.boundingBox()
+  check(
+    'T11 server modal: input and refresh button sit side by side (no overlap)',
+    !!inBox11 &&
+      !!btnBox11 &&
+      (btnBox11.x >= inBox11.x + inBox11.width - 0.5 || inBox11.x >= btnBox11.x + btnBox11.width - 0.5),
+    `in=${JSON.stringify(inBox11)} btn=${JSON.stringify(btnBox11)}`,
+  )
+  // The combobox opens on the input's focus event. The earlier list-open/Escape left this
+  // input focused (selectOption does not move focus), and clicking an already-focused input
+  // fires no focus event — blur it first so every "open" click below really opens the list.
+  const unfocusModelInput = () =>
+    page.evaluate(() => {
+      const a = document.activeElement
+      if (a instanceof HTMLInputElement && a.placeholder === 'pick or type a model id') a.blur()
+    })
+  const dirOf11 = async () => {
+    const cls = await dlg11
+      .locator('label[data-model-combo] .absolute')
+      .first()
+      .getAttribute('class')
+      .catch(() => null)
+    return cls?.includes('bottom-full') ? 'up' : cls?.includes('top-full') ? 'down' : '?'
+  }
+  const btnClearOfList11 = async () => {
+    const lb = await dlg11.locator('label[data-model-combo] ul').boundingBox().catch(() => null)
+    if (!lb || !btnBox11) return true
+    return !(
+      btnBox11.x < lb.x + lb.width &&
+      btnBox11.x + btnBox11.width > lb.x &&
+      btnBox11.y < lb.y + lb.height &&
+      btnBox11.y + btnBox11.height > lb.y
+    )
+  }
+  const topIsBtn11 = () =>
+    refreshBtn
+      .evaluate((b) => {
+        const r = b.getBoundingClientRect()
+        return b.contains(document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2))
+      })
+      .catch(() => false)
+  // Guard against a vacuous pass: the overlap assertions only mean something if the list rendered.
+  const listOpen11 = () => dlg11.locator('label[data-model-combo] ul li').count().then((n) => n > 0)
+  await unfocusModelInput()
+  await modelInput.click() // opens in whichever direction has room
+  await page.waitForTimeout(300)
+  const dir1 = await dirOf11()
+  check(
+    `T11 server modal: list opened ${dir1} does not cover the refresh button`,
+    (await listOpen11()) && (await btnClearOfList11()) && (await topIsBtn11()),
+  )
+  await page.keyboard.press('Escape') // closes only the list
+  // fitDropdown measures room inside the modal box, so viewport height alone never flips the
+  // direction; phone width (<768) is what forces dropUp=false. Use whichever yields the opposite.
+  if (dir1 === 'up') await page.setViewportSize({ width: 390, height: 844 })
+  else await page.setViewportSize({ width: 1280, height: 720 })
+  await page.waitForTimeout(300)
+  btnBox11 = await refreshBtn.boundingBox() // modal re-centers on resize — recapture
+  await unfocusModelInput()
+  await modelInput.click() // refits with the new viewport
+  await page.waitForTimeout(300)
+  const dir2 = await dirOf11()
+  check(
+    `T11 server modal: list opened ${dir2} does not cover the refresh button`,
+    (await listOpen11()) && (await btnClearOfList11()) && (await topIsBtn11()),
+  )
+  await page.keyboard.press('Escape') // closes only the list; dialog stays open
   await page.keyboard.press('Escape') // close the dialog
 
   // ---- summary -----------------------------------------------------------------

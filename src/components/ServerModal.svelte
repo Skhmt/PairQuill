@@ -94,7 +94,7 @@
    * list into the larger free space above/below the input keeps it inside the box, so no
    * outer scrollbar can appear. Below md the panes stack and the input sits high in a tall
    * scrollable box, so the list always opens downward (opening up would cover the server
-   * list and the refresh button) after nudging the box's scroll to make room below.
+   * list) after nudging the box's scroll to make room below.
    */
   const DROPDOWN_MAX_H = 224; // was max-h-56
   const DROPDOWN_MIN_H = 120;
@@ -111,9 +111,9 @@
     const below = b.bottom - pad - i.bottom - reserve;
     const above = i.top - (b.top + pad) - reserve;
     if (window.innerWidth < 768) {
-      // Stacked phone layout: opening upward would cover the server list and the Model ID
-      // row itself (the refresh button sits right there). Open downward instead — first
-      // nudge the box's scroll so there is room under the input, then size the list to it.
+      // Stacked phone layout: opening upward would cover the server list. Open downward
+      // instead — first nudge the box's scroll so there is room under the input, then size
+      // the list to it.
       const need = DROPDOWN_MAX_H - below;
       if (need > 0) {
         const maxScroll = boxEl.scrollHeight - boxEl.clientHeight;
@@ -399,26 +399,14 @@
             />
           </label>
           <!-- z-10 on the label (not an opaque/opacity-dimmed wrapper) so the z-20 dropdown
-               stacks above later siblings without creating a dimming stacking context -->
+               stacks above later siblings without creating a dimming stacking context. The
+               refresh button lives in the input row below: the list anchors to that row's
+               edges, so it can never open over the button itself. -->
           <label class="relative z-10 form-control text-xs" data-model-combo>
             <span class="opacity-70">Model ID</span>
-            <!-- z-30 keeps the button above the z-20 list when it opens upward over this row.
-                 It must not live inside the opacity-dimmed span: opacity < 1 creates its own
-                 stacking context, which would be painted below the dropdown no matter what. -->
-            <button
-              class="relative z-30 ml-1.5 inline-flex items-center gap-1 font-medium text-primary hover:underline disabled:pointer-events-none disabled:opacity-60"
-              title={refreshing ? "Refreshing model list…" : "Refresh model list only"}
-              disabled={refreshing}
-              onclick={() => void doRefresh()}
-            >
-              refresh<i
-                class={`fa-solid ${refreshing ? "fa-spinner fa-spin" : "fa-rotate"}`}
-              ></i>
-            </button>
-            {#if refreshNote}<span class="relative z-30 ml-1.5 text-success">{refreshNote}</span>{/if}
-            <div class="relative mt-1">
+            <div class="relative mt-1 flex items-center gap-1.5">
               <input
-                class="input input-bordered input-sm w-full"
+                class="input input-bordered input-sm grow"
                 value={profile.modelId}
                 placeholder="pick or type a model id"
                 bind:this={modelInputEl}
@@ -436,6 +424,15 @@
                 }}
                 onkeydown={onModelKeydown}
               />
+              <button
+                class="btn btn-ghost btn-xs shrink-0"
+                title={refreshing ? "Refreshing model list…" : "Refresh model list only"}
+                disabled={refreshing}
+                onclick={() => void doRefresh()}
+              >
+                <i class={`fa-solid ${refreshing ? "fa-spinner fa-spin" : "fa-rotate"}`}></i>
+              </button>
+              {#if refreshNote}<span class="shrink-0 text-success">{refreshNote}</span>{/if}
               {#if modelOpen && models.length > 0}
                 <div
                   class={`absolute left-0 right-0 z-20 overflow-hidden rounded-box border border-base-300 bg-base-100 shadow-lg ${dropUp ? "bottom-full mb-1" : "top-full mt-1"}`}
