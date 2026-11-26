@@ -55,6 +55,17 @@ export interface ModelInfo {
 /** Outcome of a model-list refresh — lets callers show inline feedback (App toasts errors itself). */
 export type RefreshResult = { ok: true; count: number } | { ok: false; message: string }
 
+/** One chapter of a story. Identity is `id`; `title` and the display number are cosmetic. */
+export interface Chapter {
+  id: string
+  title: string
+  content: string
+  summary?: string
+  summaryUpdatedAt?: number
+  summarySource?: 'auto' | 'manual'
+  summaryStale?: boolean
+}
+
 /** A story document with its per-document side-channel data. */
 export interface StoryDoc {
   id: string
@@ -67,6 +78,14 @@ export interface StoryDoc {
   tone: string
   /** Manual override of the model's reported context length (tokens). null = auto. */
   contextOverride: number | null
+  /** Optional chapter list; absent/null means legacy single-content story. */
+  chapters?: Chapter[] | null
+  /** Currently selected chapter id when chaptered. */
+  activeChapterId?: string | null
+  /** View mode when chaptered ('chapter' = edit active chapter, 'story' = read-only full story). */
+  viewMode?: 'chapter' | 'story'
+  /** Whether summaries of non-current chapters are injected into the system prompt. */
+  includeChapterSummaries?: boolean
 }
 
 export type OpKind = 'expand' | 'condense' | 'grammar' | 'custom' | 'continue' | 'instruct' | 'retry'
@@ -83,6 +102,8 @@ export interface GenerationRecord {
   output: string
   promptTokens?: number
   completionTokens?: number
+  chapterId?: string
+  chapterTitle?: string
 }
 
 /** DaisyUI preset themes offered by the top-bar Theme picker (kept in sync with app.css). */
@@ -101,6 +122,10 @@ export interface AppSettings {
   replyLength: number
   /** Content rating for generated prose — top-bar slider (persisted; legacy saves fall back to the SFW default). */
   rating: ContentRating
+  /** Whether the chapter outline sidebar is open (persisted, default true). */
+  outlineOpen?: boolean
+  /** Width of the chapter outline sidebar in pixels (persisted, default 256). */
+  outlineWidth?: number
 }
 
 /** Commands the editor executes (insert text / run an op / open a dialog / stop). */
@@ -124,6 +149,7 @@ export interface BudgetBreakdown {
   systemTokens: number
   worldTokens: number
   characterTokens: number
+  summaryTokens: number
   storyTokens: number
   reserveTokens: number
   storyTrimmed: boolean

@@ -1,5 +1,6 @@
 <script lang="ts">
 import type { BudgetBreakdown, StoryDoc } from '../lib/types'
+import { isChaptered } from '../lib/chapters'
 
 let {
   open,
@@ -65,6 +66,29 @@ const pct = (t: number) => (maxContext > 0 ? Math.max(0, Math.min(100, (t / maxC
           {/if}
         </div>
 
+        {#if isChaptered(doc)}
+          <div class="rounded-lg border border-base-300 bg-base-200/40 p-3">
+            <label class="flex cursor-pointer items-start gap-2.5">
+              <input
+                type="checkbox"
+                class="checkbox checkbox-primary checkbox-sm mt-0.5"
+                checked={!!doc.includeChapterSummaries}
+                disabled={(doc.viewMode ?? 'chapter') === 'story'}
+                onchange={(e) => {
+                  doc.includeChapterSummaries = (e.target as HTMLInputElement).checked
+                  doc.updatedAt = Date.now()
+                }}
+              />
+              <span class="text-xs">
+                <span class="block font-medium">Include summaries of other chapters</span>
+                <span class="mt-0.5 block opacity-60">
+                  When continuing inside one chapter, summarized versions of the other chapters are added to the system prompt so the model knows what happened elsewhere. Chapters without a summary are skipped.
+                </span>
+              </span>
+            </label>
+          </div>
+        {/if}
+
         {#if budget}
           <div>
             <span class="label pb-1 text-xs opacity-70">Prompt budget</span>
@@ -72,6 +96,9 @@ const pct = (t: number) => (maxContext > 0 ? Math.max(0, Math.min(100, (t / maxC
               <div class="bg-primary" style={`width: ${pct(budget.systemTokens)}%`} title={`System prompt: ${budget.systemTokens}`}></div>
               <div class="bg-secondary" style={`width: ${pct(budget.worldTokens)}%`} title={`World notes: ${budget.worldTokens}`}></div>
               <div class="bg-accent" style={`width: ${pct(budget.characterTokens)}%`} title={`Characters: ${budget.characterTokens}`}></div>
+              {#if budget.summaryTokens > 0}
+                <div class="bg-success" style={`width: ${pct(budget.summaryTokens)}%`} title={`Summaries (other chapters): ${budget.summaryTokens}`}></div>
+              {/if}
               <div class="bg-info" style={`width: ${pct(budget.storyTokens)}%`} title={`Story tail: ${budget.storyTokens}${budget.storyTrimmed ? ' (trimmed)' : ''}`}></div>
               <div class="bg-neutral/30" style={`width: ${pct(budget.reserveTokens)}%`} title={`Reserve for output: ${budget.reserveTokens}`}></div>
             </div>
@@ -79,6 +106,9 @@ const pct = (t: number) => (maxContext > 0 ? Math.max(0, Math.min(100, (t / maxC
               <li class="flex items-center gap-2"><span class="h-2.5 w-2.5 rounded-full bg-primary"></span>System prompt<span class="ml-auto tabular-nums opacity-70">{budget.systemTokens}</span></li>
               <li class="flex items-center gap-2"><span class="h-2.5 w-2.5 rounded-full bg-secondary"></span>World notes<span class="ml-auto tabular-nums opacity-70">{budget.worldTokens}</span></li>
               <li class="flex items-center gap-2"><span class="h-2.5 w-2.5 rounded-full bg-accent"></span>Characters<span class="ml-auto tabular-nums opacity-70">{budget.characterTokens}</span></li>
+              {#if budget.summaryTokens > 0 || (isChaptered(doc) && doc.includeChapterSummaries)}
+                <li class="flex items-center gap-2"><span class="h-2.5 w-2.5 rounded-full bg-success"></span>Summaries (other chapters)<span class="ml-auto tabular-nums opacity-70">{budget.summaryTokens}</span></li>
+              {/if}
               <li class="flex items-center gap-2"><span class="h-2.5 w-2.5 rounded-full bg-info"></span>Story tail{budget.storyTrimmed ? ' (trimmed)' : ''}<span class="ml-auto tabular-nums opacity-70">{budget.storyTokens}</span></li>
               <li class="flex items-center gap-2"><span class="h-2.5 w-2.5 rounded-full bg-neutral/30"></span>Output reserve<span class="ml-auto tabular-nums opacity-70">{budget.reserveTokens}</span></li>
             </ul>

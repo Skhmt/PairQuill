@@ -3,11 +3,15 @@ import type { ContentRating, EditorCommand, GenStats, GenerationRecord, OpKind, 
 import { uid, wordCount } from '../lib/format'
 import { estimateTokens } from '../lib/tokens'
 import { chatStream } from '../lib/llm'
-import { OP_LABELS, buildContinueRequest, buildInstructRequest, buildOpRequest, effectiveMaxTokens, toMessages } from '../lib/prompts'
+import { OP_LABELS, buildChapterContext, buildContinueRequest, buildInstructRequest, buildOpRequest, effectiveMaxTokens, toMessages } from '../lib/prompts'
 import type { BuiltRequest } from '../lib/prompts'
+import { chapterDisplayTitle, storyText } from '../lib/chapters'
 
 let {
   doc,
+  chapterId = null,
+  storyMode = false,
+  scrollToChapter = null,
   profile,
   command,
   maxContext,
@@ -21,9 +25,13 @@ let {
   onGeneration,
   onGenStats,
   onSelectionChange,
+  onFocusChapter,
   onError,
 }: {
   doc: StoryDoc
+  chapterId?: string | null
+  storyMode?: boolean
+  scrollToChapter?: { id: string; seq: number } | null
   profile: ServerProfile | null
   command: EditorCommand | null
   maxContext: number
@@ -40,8 +48,47 @@ let {
   onGeneration: (g: GenerationRecord) => void
   onGenStats: (s: GenStats) => void
   onSelectionChange: (info: { has: boolean; words: number }) => void
+  onFocusChapter?: (id: string) => void
   onError: (msg: string) => void
 } = $props()
+
+let chapterEls = $state<Record<string, HTMLTextAreaElement>>({})
+let chapterHeaderEls = $state<Record<string, HTMLDivElement>>({})
+let focusedChapterId = $state<string | null>(null)
+let hlChapterId = $state<string | null>(null)
+
+const targetChapter = $derived(doc.chapters?.find((c) => c.id === chapterId) ?? null)
+const activeTargetChapter = $derived(
+  storyMode
+    ? (doc.chapters?.find((c) => c.id === (focusedChapterId ?? doc.activeChapterId)) ?? doc.chapters?.[0] ?? null)
+    : targetChapter,
+)
+const currentText = $derived(activeTargetChapter ? activeTargetChapter.content : doc.content)
+
+function commitText(v: string, ch = activeTargetChapter) {
+  if (ch) {
+    if (ch.content !== v) {
+      ch.content = v
+      if (ch.summarySource === 'auto' && ch.summary?.trim()) {
+        ch.summaryStale = true
+      }
+    }
+    doc.content = storyText(doc)
+  } else {
+    doc.content = v
+  }
+  doc.updatedAt = Date.now()
+}
+
+function chapterDocOffset(chId: string): number {
+  if (!doc.chapters) return 0
+  let pos = 0
+  for (const c of doc.chapters) {
+    if (c.id === chId) return pos
+    pos += c.content.length + 2 // '\n\n' join separator
+  }
+  return pos
+}
 
 const fontClass = $derived(fontSize === 'sm' ? 'text-[15px] max-sm:text-base' : fontSize === 'lg' ? 'text-lg' : 'text-base')
 const familyClass = $derived(fontFamily === 'sans' ? 'editor-sans' : fontFamily === 'mono' ? 'editor-mono' : 'editor-serif')
@@ -128,6 +175,8 @@ function applyInstruct() {
   instructText = ''
 }
 
+const activeEl = $derived(storyMode ? (activeTargetChapter ? chapterEls[activeTargetChapter.id] : undefined) : textareaEl)
+
 // Report selection state (word count included) for the top bar's hint + op buttons.
 $effect(() => {
   if (!hasSelection || !selRange) {
@@ -136,7 +185,7 @@ $effect(() => {
   }
   onSelectionChange({
     has: true,
-    words: wordCount(doc.content.slice(selRange.start, selRange.end)),
+    words: wordCount(currentText.slice(selRange.start, selRange.end)),
   })
 })
 
@@ -147,11 +196,24 @@ $effect(() => {
 })
 
 function updateSelection() {
-  const el = textareaEl
+  const el = activeEl
   if (!el) return
   userMoved = true // any manual caret interaction wins over auto-restoration
-  selRange = { start: el.selectionStart ?? 0, end: el.selectionEnd ?? 0 }
+  const start = el.selectionStart ?? 0
+  const end = el.selectionEnd ?? 0
+  selRange = { start, end }
 }
+
+// Scroll to and focus a chapter when clicked in the outline in Full-story mode.
+$effect(() => {
+  const target = scrollToChapter
+  if (!target || !storyMode) return
+  focusedChapterId = target.id
+  requestAnimationFrame(() => {
+    chapterHeaderEls[target.id]?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+    chapterEls[target.id]?.focus({ preventScroll: true })
+  })
+})
 
 /**
  * Project the newly-generated range onto the visible textarea via a hidden mirror
@@ -159,7 +221,7 @@ function updateSelection() {
  * the overlay lives inside the scroll container, so it scrolls with the text for free.
  */
 function computeHighlight(range: { start: number; end: number }) {
-  const el = textareaEl
+  const el = storyMode && hlChapterId ? chapterEls[hlChapterId] : textareaEl
   const m = hlMirrorEl
   if (!el || !m) return
   // Measure against the textarea's *actual* rendered text (its value is what the
@@ -207,7 +269,7 @@ function computeHighlight(range: { start: number; end: number }) {
 // Re-project the highlight whenever the text or its layout can move.
 $effect(() => {
   const range = newRange
-  void doc.content // content changes re-project (no-op while a generation is running)
+  void currentText // content changes re-project (no-op while a generation is running)
   void fontSize
   void fontFamily
   void measure
@@ -222,10 +284,11 @@ $effect(() => {
 // Keep the caret pinned to the end of streamed text (unless the user moved it).
 $effect(() => {
   const g = gen
-  if (!g || !textareaEl || userMoved) return
+  const el = activeEl
+  if (!g || !el || userMoved) return
   const pos = g.anchor + shownLen
   try {
-    textareaEl.setSelectionRange(pos, pos)
+    el.setSelectionRange(pos, pos)
   } catch {
     /* ignore */
   }
@@ -259,37 +322,41 @@ function handleEditorKeydown(e: KeyboardEvent) {
   if (gen) return
   const mod = e.ctrlKey || e.metaKey
   if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'z') {
-    if (undoStack.length > 0 && lastProgrammaticContent === doc.content) {
+    if (undoStack.length > 0 && lastProgrammaticContent === currentText) {
       e.preventDefault()
       const prev = undoStack.pop()!
-      doc.content = prev
-      doc.updatedAt = Date.now()
+      commitText(prev)
       lastProgrammaticContent = undoStack.length > 0 ? prev : null
       newRange = null
     }
   }
 }
 
-// Auto-size the writing textarea so the editor fills the pane down to the bottom
+// Auto-size the writing textarea(s) so the editor fills the pane down to the bottom
 // of the viewport (and scrolls only when the content outgrows it).
 function fitEditor() {
-  const el = textareaEl
   const sc = scrollEl
-  if (!el || !sc) return
+  if (!sc) return
   if (fitRaf) cancelAnimationFrame(fitRaf)
-  // The textarea keeps overflow:hidden (see its class), so the measured height below is
-  // always the *true* text height at full width. If it could show its own scrollbar,
-  // the box would be ~15px narrower, wrap extra lines, and bake phantom blank space
-  // into the explicit height on long stories (which then persists — scrollHeight never
-  // shrinks). The outer div is the only scroller.
   fitRaf = requestAnimationFrame(() => {
     fitRaf = 0
-    // Resetting the height collapses the box and clamps scroll positions to zero. The
-    // visible scroller is usually the outer container (the textarea itself only grows),
-    // so save and restore BOTH — otherwise typing yanks the view back to the top.
-    const st = el.scrollTop
     const sst = sc.scrollTop
-    const len = doc.content.length
+    if (storyMode) {
+      for (const ch of doc.chapters ?? []) {
+        const el = chapterEls[ch.id]
+        if (!el) continue
+        const st = el.scrollTop
+        el.style.height = 'auto'
+        el.style.height = `${Math.max(el.scrollHeight, 120)}px`
+        el.scrollTop = st
+      }
+      sc.scrollTop = sst
+      return
+    }
+    const el = textareaEl
+    if (!el) return
+    const st = el.scrollTop
+    const len = currentText.length
     if (len < prevLen) {
       el.style.height = 'auto'
     }
@@ -302,7 +369,10 @@ function fitEditor() {
 }
 
 $effect(() => {
-  void doc.content
+  void currentText
+  if (storyMode && doc.chapters) {
+    for (const c of doc.chapters) void c.content
+  }
   fitEditor()
 })
 $effect(() => {
@@ -329,20 +399,19 @@ function handleInput(e: Event) {
   if (gen) return
   lastProgrammaticContent = null
   newRange = null // any manual edit clears the "new text" highlight
-  doc.content = (e.target as HTMLTextAreaElement).value
-  doc.updatedAt = Date.now()
+  commitText((e.target as HTMLTextAreaElement).value)
   updateSelection()
 }
 
 function insertText(text: string) {
   if (!text) return
-  const el = textareaEl
-  const start = el?.selectionStart ?? doc.content.length
+  const el = activeEl
+  const start = el?.selectionStart ?? currentText.length
   const end = el?.selectionEnd ?? start
-  pushUndo(doc.content)
-  doc.content = doc.content.slice(0, start) + text + doc.content.slice(end)
-  lastProgrammaticContent = doc.content
-  doc.updatedAt = Date.now()
+  pushUndo(currentText)
+  const next = currentText.slice(0, start) + text + currentText.slice(end)
+  commitText(next)
+  lastProgrammaticContent = next
   requestAnimationFrame(() => {
     if (el) {
       el.selectionStart = el.selectionEnd = start + text.length
@@ -366,8 +435,13 @@ async function runOp(op: OpKind, customInstruction?: string) {
   }
   // The top-bar slider caps reply length; the profile's own max tokens (if set) is a hard cap.
   const effParams: SamplingParams = { ...profile.params, maxTokens: effectiveMaxTokens(profile, maxReplyTokens) }
+  const opChapter = activeTargetChapter
+  const chapterCtx = buildChapterContext(doc)
+  const chapterIdx = opChapter && doc.chapters ? doc.chapters.indexOf(opChapter) : -1
+  const chapterTitle = opChapter && chapterIdx >= 0 ? chapterDisplayTitle(opChapter, chapterIdx) : undefined
+  const docOffset = storyMode && opChapter ? chapterDocOffset(opChapter.id) : 0
 
-  const el = textareaEl
+  const el = activeEl
   let anchor: number
   let selEnd: number
   let selection = ''
@@ -380,32 +454,34 @@ async function runOp(op: OpKind, customInstruction?: string) {
       onError('Nothing to retry yet — generate something first.')
       return
     }
-    const intact = doc.content.slice(prev.anchor, prev.anchor + prev.output.length) === prev.output
-    const removed = !intact && doc.content === prev.before + prev.after
+    const intact = currentText.slice(prev.anchor, prev.anchor + prev.output.length) === prev.output
+    const removed = !intact && currentText === prev.before + prev.after
     if (intact || removed) {
       anchor = prev.anchor
       selEnd = prev.anchor + (intact ? prev.output.length : 0)
       req = { systemPrompt: prev.systemPrompt, userMessage: prev.userMessage }
     } else if (prev.op === 'continue' || prev.op === 'instruct' || prev.op === 'retry') {
       // The doc changed since; continue fresh from the cursor with the same intent.
-      anchor = el?.selectionStart ?? doc.content.length
+      anchor = el?.selectionStart ?? currentText.length
       selEnd = anchor
+      const promptPos = docOffset + anchor
       req =
         prev.op === 'instruct'
-          ? buildInstructRequest(profile, doc, anchor, maxContext, prev.instruction, rating, effParams.maxTokens)
-          : buildContinueRequest(profile, doc, anchor, maxContext, rating, effParams.maxTokens)
+          ? buildInstructRequest(profile, doc, promptPos, maxContext, prev.instruction, rating, effParams.maxTokens, chapterCtx)
+          : buildContinueRequest(profile, doc, promptPos, maxContext, rating, effParams.maxTokens, chapterCtx)
     } else {
       onError('The last generated text was edited. Select a passage to retry that operation.')
       return
     }
   } else if (op === 'continue' || op === 'instruct') {
     // Insertion ops: no selection needed, anchored at the caret.
-    anchor = el?.selectionStart ?? doc.content.length
+    anchor = el?.selectionStart ?? currentText.length
     selEnd = anchor
+    const promptPos = docOffset + anchor
     req =
       op === 'instruct'
-        ? buildInstructRequest(profile, doc, anchor, maxContext, customInstruction ?? '', rating, effParams.maxTokens)
-        : buildContinueRequest(profile, doc, anchor, maxContext, rating, effParams.maxTokens)
+        ? buildInstructRequest(profile, doc, promptPos, maxContext, customInstruction ?? '', rating, effParams.maxTokens, chapterCtx)
+        : buildContinueRequest(profile, doc, promptPos, maxContext, rating, effParams.maxTokens, chapterCtx)
   } else {
     if (!selRange || selRange.end - selRange.start < 1) {
       onError('Select some text first, then try again.')
@@ -413,11 +489,11 @@ async function runOp(op: OpKind, customInstruction?: string) {
     }
     anchor = selRange.start
     selEnd = selRange.end
-    selection = doc.content.slice(anchor, selEnd)
-    req = buildOpRequest(profile, doc, op, selection, anchor, rating, customInstruction)
+    selection = currentText.slice(anchor, selEnd)
+    req = buildOpRequest(profile, doc, op, selection, docOffset + anchor, rating, customInstruction, chapterCtx)
   }
 
-  const originalContent = doc.content
+  const originalContent = currentText
   const before = originalContent.slice(0, anchor)
   const after = originalContent.slice(selEnd)
   const isReplaceOp = anchor !== selEnd
@@ -425,6 +501,7 @@ async function runOp(op: OpKind, customInstruction?: string) {
     op === 'custom' || op === 'instruct' ? (customInstruction?.trim() || OP_LABELS[op]) : OP_LABELS[op]
 
   gen = { op, instruction: label, anchor }
+  hlChapterId = opChapter?.id ?? null
   userMoved = false
   selRange = null
   newRange = null // replaced by the highlight of this generation's output
@@ -452,6 +529,7 @@ async function runOp(op: OpKind, customInstruction?: string) {
       output: full,
       promptTokens: promptTokens ?? estPrompt,
       completionTokens: completionTokens ?? estimateTokens(full),
+      ...(opChapter ? { chapterId: opChapter.id, chapterTitle } : {}),
     })
   }
 
@@ -476,7 +554,7 @@ async function runOp(op: OpKind, customInstruction?: string) {
               undoPushed = true
             }
             lastFlush = now
-            doc.content = before + full + after
+            commitText(before + full + after, opChapter)
             shownLen = full.length
           }
         },
@@ -507,17 +585,17 @@ async function runOp(op: OpKind, customInstruction?: string) {
 
     if (shouldRestore) {
       if (undoPushed) undoStack.pop()
-      if (doc.content !== originalContent) {
-        doc.content = originalContent
+      if ((opChapter ? opChapter.content : doc.content) !== originalContent) {
+        commitText(originalContent, opChapter)
       }
       shownLen = 0
       newRange = null
     } else {
       if (!undoPushed) pushUndo(originalContent)
-      doc.content = before + full + after
-      lastProgrammaticContent = doc.content
+      const finalContent = before + full + after
+      commitText(finalContent, opChapter)
+      lastProgrammaticContent = finalContent
       shownLen = full.length
-      doc.updatedAt = Date.now()
       // Highlight everything this generation added (works for both insert & replace ops).
       newRange = full.trim() ? { start: anchor, end: anchor + full.length } : null
     }
@@ -543,26 +621,82 @@ async function runOp(op: OpKind, customInstruction?: string) {
 <div class="flex min-h-0 flex-1 flex-col bg-base-100">
   <div class="min-h-0 flex-1 overflow-y-auto" bind:this={scrollEl}>
     <div class={`mx-auto min-h-full px-4 pt-4 sm:px-6 sm:pt-8 pb-1 ${measureClass}`}>
-      <!-- relative wrapper == textarea box, so mirror-measured rects map 1:1 onto the overlay -->
-      <div class="relative">
-        {#each hlRects as r, i (`${i}:${r.top},${r.left}`)}
-          <!-- Underline bar along the bottom of each line fragment the new text spans. -->
-          <span class="gen-new" style={`left: ${r.left}px; top: ${r.top + r.height - 2}px; width: ${r.width}px`}></span>
+      {#if storyMode}
+        {#each doc.chapters ?? [] as ch, idx (ch.id)}
+          <div
+            bind:this={chapterHeaderEls[ch.id]}
+            class={`mb-3 flex items-center gap-2 border-b border-base-300 pb-1.5 ${idx > 0 ? 'mt-8' : ''}`}
+          >
+            <input
+              type="text"
+              class={`${familyClass} w-full bg-transparent text-xl font-bold tracking-tight outline-none placeholder:opacity-40 focus:text-primary`}
+              value={ch.title}
+              placeholder={`Chapter ${idx + 1}`}
+              aria-label={`Chapter ${idx + 1} title`}
+              oninput={(e) => {
+                ch.title = (e.target as HTMLInputElement).value
+                doc.updatedAt = Date.now()
+              }}
+              onblur={(e) => {
+                ch.title = (e.target as HTMLInputElement).value.trim()
+                doc.updatedAt = Date.now()
+              }}
+            />
+          </div>
+          <div class="relative">
+            {#if hlChapterId === ch.id}
+              {#each hlRects as r, i (`${i}:${r.top},${r.left}`)}
+                <span class="gen-new" style={`left: ${r.left}px; top: ${r.top + r.height - 2}px; width: ${r.width}px`}></span>
+              {/each}
+            {/if}
+            <textarea
+              bind:this={chapterEls[ch.id]}
+              class={`${familyClass} w-full resize-none overflow-hidden bg-transparent leading-relaxed outline-none placeholder:opacity-40 ${fontClass}`}
+              placeholder="Start writing… or select a passage to transform it."
+              value={ch.content}
+              readonly={!!gen}
+              onfocus={() => {
+                focusedChapterId = ch.id
+                onFocusChapter?.(ch.id)
+                updateSelection()
+              }}
+              oninput={(e) => {
+                if (gen) return
+                lastProgrammaticContent = null
+                newRange = null
+                focusedChapterId = ch.id
+                commitText((e.target as HTMLTextAreaElement).value, ch)
+                updateSelection()
+              }}
+              onkeydown={handleEditorKeydown}
+              onclick={updateSelection}
+              onkeyup={updateSelection}
+              onselect={updateSelection}
+            ></textarea>
+          </div>
         {/each}
-        <textarea
-          bind:this={textareaEl}
-          class={`${familyClass} w-full resize-none overflow-hidden bg-transparent leading-relaxed outline-none placeholder:opacity-40 ${fontClass}`}
-          placeholder="Start writing… or select a passage to transform it."
-          value={doc.content}
-          readonly={!!gen}
-          oninput={handleInput}
-          onkeydown={handleEditorKeydown}
-          onclick={updateSelection}
-          onkeyup={updateSelection}
-          onfocus={updateSelection}
-          onselect={updateSelection}
-        ></textarea>
-      </div>
+      {:else}
+        <!-- relative wrapper == textarea box, so mirror-measured rects map 1:1 onto the overlay -->
+        <div class="relative">
+          {#each hlRects as r, i (`${i}:${r.top},${r.left}`)}
+            <!-- Underline bar along the bottom of each line fragment the new text spans. -->
+            <span class="gen-new" style={`left: ${r.left}px; top: ${r.top + r.height - 2}px; width: ${r.width}px`}></span>
+          {/each}
+          <textarea
+            bind:this={textareaEl}
+            class={`${familyClass} w-full resize-none overflow-hidden bg-transparent leading-relaxed outline-none placeholder:opacity-40 ${fontClass}`}
+            placeholder="Start writing… or select a passage to transform it."
+            value={currentText}
+            readonly={!!gen}
+            oninput={handleInput}
+            onkeydown={handleEditorKeydown}
+            onclick={updateSelection}
+            onkeyup={updateSelection}
+            onfocus={updateSelection}
+            onselect={updateSelection}
+          ></textarea>
+        </div>
+      {/if}
     </div>
   </div>
 

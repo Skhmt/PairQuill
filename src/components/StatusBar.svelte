@@ -3,6 +3,7 @@ import type { BudgetBreakdown, GenStats, ModelInfo, ServerProfile } from '../lib
 
 let {
   words,
+  chapterWords = null,
   budget,
   maxContext,
   exceedsModel,
@@ -17,6 +18,7 @@ let {
   onShowContext,
 }: {
   words: number
+  chapterWords?: number | null
   budget: BudgetBreakdown | null
   maxContext: number
   exceedsModel: boolean
@@ -33,7 +35,7 @@ let {
 
 /** Prompt tokens currently in use (system + world + characters + story). null = nothing to measure. */
 const contextUsed = $derived(
-  budget ? budget.systemTokens + budget.worldTokens + budget.characterTokens + budget.storyTokens : null,
+  budget ? budget.systemTokens + budget.worldTokens + budget.characterTokens + budget.summaryTokens + budget.storyTokens : null,
 )
 const contextPct = $derived(contextUsed !== null && maxContext > 0 ? Math.min(100, (contextUsed / maxContext) * 100) : 0)
 const modelLoading = $derived(models.length === 0 && !!activeProfile?.baseUrl)
@@ -53,7 +55,14 @@ function shortModel(m: ModelInfo): string {
 
 <!-- flex-wrap: on narrow windows the groups drop to a second line instead of squashing/overlapping -->
 <footer class="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-base-300 bg-base-100 px-3 py-1 text-xs">
-  <span class="flex shrink-0 items-center gap-1.5 whitespace-nowrap" title="Word count"><i class="fa-solid fa-font opacity-60"></i>{words} words</span>
+  <span class="flex shrink-0 items-center gap-1.5 whitespace-nowrap" title="Word count">
+    <i class="fa-solid fa-font opacity-60"></i>
+    {#if chapterWords !== null && chapterWords !== undefined}
+      {chapterWords.toLocaleString()} words in chapter · {words.toLocaleString()} total
+    {:else}
+      {words} words
+    {/if}
+  </span>
 
   <button
     class="btn btn-ghost h-auto min-h-0 cursor-pointer items-center gap-2 px-1 py-0.5 text-xs"

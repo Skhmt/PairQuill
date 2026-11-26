@@ -1,9 +1,10 @@
 // Prompt construction: system templates with world-data variables, and per-operation user messages.
 
-import type { ChatMessage, } from './llm'
-import type { ContentRating, OpKind, ServerProfile, StoryDoc } from './types'
+import type { ChatMessage } from './llm'
+import type { Chapter, ContentRating, OpKind, ServerProfile, StoryDoc } from './types'
 import { RATING_LEVELS } from './types'
 import { computeBudget, storyTail } from './tokens'
+import { activeChapter, chapterDisplayTitle, isChaptered } from './chapters'
 
 export const OP_LABELS: Record<OpKind, string> = {
   expand: 'Expand',
@@ -51,19 +52,71 @@ export function ratingSection(rating: ContentRating): string {
   return `Content rating: ${level.label}\n${RATING_GUIDANCE[level.id]}`
 }
 
+export interface ChapterContext {
+  /** e.g. "Ch. 3 · Title" for the label line. */
+  currentTitle: string
+  /** Non-current chapters that have a non-empty summary. */
+  others: { number: number; title: string; summary: string }[]
+}
+
+/** Build ChapterContext for a doc when in Chapter mode with summaries enabled; else undefined. */
+export function buildChapterContext(doc: StoryDoc): ChapterContext | undefined {
+  if (!isChaptered(doc)) return undefined
+  if ((doc.viewMode ?? 'chapter') !== 'chapter') return undefined
+  if (!doc.includeChapterSummaries) return undefined
+  const list = doc.chapters!
+  const current = activeChapter(doc)
+  if (!current) return undefined
+  const currentIdx = list.indexOf(current)
+  const currentTitle = `Ch. ${currentIdx + 1} · ${chapterDisplayTitle(current, currentIdx)}`
+  const others: ChapterContext['others'] = []
+  for (let i = 0; i < list.length; i++) {
+    if (i === currentIdx) continue
+    const summary = list[i].summary?.trim()
+    if (!summary) continue
+    others.push({
+      number: i + 1,
+      title: chapterDisplayTitle(list[i], i),
+      summary,
+    })
+  }
+  return { currentTitle, others }
+}
+
+/** Format the "other chapters (summarized)" system prompt block (§7.3). */
+export function chapterSummarySection(ctx: ChapterContext): string {
+  if (ctx.others.length === 0) return ''
+  const lines = ctx.others.map((o) => `Ch. ${o.number} · ${o.title}: ${o.summary}`)
+  return [
+    'Story so far — other chapters (summarized):',
+    ...lines,
+    `You are currently writing inside "${ctx.currentTitle}". Use the summaries above for consistency, but do not retell or reference them unless the story naturally does.`,
+  ].join('\n')
+}
+
 /**
  * Render the profile's system prompt template with the document's side-channel data.
  * The {rating} placeholder injects the content-rating block; templates without it get
  * the block appended, so every request always carries the selected rating's guidance.
+ * When `chapterCtx` is provided and has summaries, the {chapters} placeholder (or append
+ * fallback) injects the non-current chapter summaries block.
  */
-export function renderSystemPrompt(profile: ServerProfile, doc: StoryDoc, rating: ContentRating): string {
+export function renderSystemPrompt(
+  profile: ServerProfile,
+  doc: StoryDoc,
+  rating: ContentRating,
+  chapterCtx?: ChapterContext,
+): string {
   const tpl = profile.systemPromptTemplate.trim() || DEFAULT_SYSTEM_TEMPLATE
+  const summaryBlock = chapterCtx ? chapterSummarySection(chapterCtx) : ''
   let out = tpl
     .replaceAll('{world_notes}', sectionOrNone(worldText(doc)))
     .replaceAll('{characters}', sectionOrNone(characterText(doc)))
     .replaceAll('{tone}', sectionOrNone(doc.tone))
     .replaceAll('{rating}', ratingSection(rating))
+    .replaceAll('{chapters}', summaryBlock || '(none)')
   if (!tpl.includes('{rating}')) out += `\n\n${ratingSection(rating)}`
+  if (summaryBlock && !tpl.includes('{chapters}')) out += `\n\n${summaryBlock}`
   return out
 }
 
@@ -109,6 +162,14 @@ function lengthHint(tokens: number): string {
   return ` Keep your reply to about ${words} words or fewer, and end at a natural sentence or paragraph break.`
 }
 
+/** Active text for prompt construction: current chapter content in Chapter mode, else `doc.content`. */
+function targetText(doc: StoryDoc): string {
+  if (isChaptered(doc) && (doc.viewMode ?? 'chapter') === 'chapter') {
+    return activeChapter(doc)?.content ?? doc.content
+  }
+  return doc.content
+}
+
 /** Build messages for a selection-targeted operation (expand/condense/grammar/custom). */
 export function buildOpRequest(
   profile: ServerProfile,
@@ -118,9 +179,11 @@ export function buildOpRequest(
   selStart: number,
   rating: ContentRating,
   customInstruction?: string,
+  chapterCtx?: ChapterContext,
 ): BuiltRequest {
-  const systemPrompt = renderSystemPrompt(profile, doc, rating)
-  const before = doc.content.slice(Math.max(0, selStart - CONTEXT_CHARS), selStart)
+  const systemPrompt = renderSystemPrompt(profile, doc, rating, chapterCtx)
+  const text = targetText(doc)
+  const before = text.slice(Math.max(0, selStart - CONTEXT_CHARS), selStart)
   const instruction =
     op === 'custom'
       ? customInstruction?.trim() || 'Apply the requested change to the selected passage. Keep events and meaning intact.'
@@ -155,24 +218,30 @@ function buildCursorRequest(
   instruction?: string,
   /** Effective reply cap (tokens): reserves context-window room and drives the soft length hint. */
   maxTokens?: number,
+  chapterCtx?: ChapterContext,
 ): BuiltRequest {
-  const systemPrompt = renderSystemPrompt(profile, doc, rating)
+  const baseSystemPrompt = renderSystemPrompt(profile, doc, rating)
+  const summaryText = chapterCtx ? chapterSummarySection(chapterCtx) : ''
+  const systemPrompt = chapterCtx ? renderSystemPrompt(profile, doc, rating, chapterCtx) : baseSystemPrompt
   // The hard cap that will actually be sent as max_tokens (slider ∩ profile limit).
   // When neither is set the server decides, so no length hint is added.
   const cap =
     maxTokens && maxTokens > 0 ? maxTokens : profile.params.maxTokens > 0 ? profile.params.maxTokens : 0
+  const text = targetText(doc)
+  const beforeCursor = text.slice(0, cursorPos)
   // Reserve room for the reply we are about to generate so the story tail can never
   // push the request past the model's context window.
   const budget = computeBudget({
     maxContext,
-    systemPrompt,
+    systemPrompt: baseSystemPrompt,
     worldText: worldText(doc),
     characterText: characterText(doc),
     toneText: doc.tone,
-    storyContent: doc.content.slice(0, cursorPos),
+    summaryText,
+    storyContent: beforeCursor,
     reserveTokens: cap > 0 ? cap : 500,
   })
-  const tail = storyTail(doc.content.slice(0, cursorPos), budget.fitsStoryChars)
+  const tail = storyTail(beforeCursor, budget.fitsStoryChars)
   const guidance = instruction?.trim()
     ? ` Follow this instruction as you continue: ${instruction.trim()}`
     : ''
@@ -195,8 +264,9 @@ export function buildContinueRequest(
   maxContext: number,
   rating: ContentRating,
   maxTokens?: number,
+  chapterCtx?: ChapterContext,
 ): BuiltRequest {
-  return buildCursorRequest(profile, doc, cursorPos, maxContext, rating, undefined, maxTokens)
+  return buildCursorRequest(profile, doc, cursorPos, maxContext, rating, undefined, maxTokens, chapterCtx)
 }
 
 /** Build messages for "instruct": continue from the cursor with custom guidance. */
@@ -208,8 +278,33 @@ export function buildInstructRequest(
   instruction: string,
   rating: ContentRating,
   maxTokens?: number,
+  chapterCtx?: ChapterContext,
 ): BuiltRequest {
-  return buildCursorRequest(profile, doc, cursorPos, maxContext, rating, instruction, maxTokens)
+  return buildCursorRequest(profile, doc, cursorPos, maxContext, rating, instruction, maxTokens, chapterCtx)
+}
+
+/** Build messages for summarizing a single chapter (§7.2). */
+export function buildSummaryRequest(
+  profile: ServerProfile,
+  doc: StoryDoc,
+  chapter: Chapter,
+  maxContext: number,
+  rating: ContentRating,
+): BuiltRequest {
+  const baseSystem = renderSystemPrompt(profile, doc, rating)
+  const systemPrompt = `${baseSystem}\n\nSummarize the following chapter in 3–5 sentences for an AI co-writer who will continue the story later. Cover: what happens, key character states/decisions, and any open threads or foreshadowing. Return only the summary.`
+  const budget = computeBudget({
+    maxContext,
+    systemPrompt,
+    worldText: worldText(doc),
+    characterText: characterText(doc),
+    toneText: doc.tone,
+    storyContent: chapter.content,
+    reserveTokens: 200,
+  })
+  const tail = storyTail(chapter.content, budget.fitsStoryChars)
+  const userMessage = `Chapter text:\n"""\n${tail.trim() || '(empty chapter)'}\n"""`
+  return { systemPrompt, userMessage }
 }
 
 export function toMessages(systemPrompt: string, userMessage: string): ChatMessage[] {

@@ -18,10 +18,35 @@ import { idbDeleteMany, idbGetAll, idbPut, idbPutMany, requestPersistentStorage 
 import { downloadFile, slugify, uid, wordCount } from './lib/format'
 import { buildProjectFile, parseProjectFile, PROJECT_FORMAT } from './lib/project'
 import type { ProjectFile } from './lib/project'
-import { listModels } from './lib/llm'
-import { characterText, effectiveMaxTokens, renderSystemPrompt, worldText } from './lib/prompts'
-import { computeBudget } from './lib/tokens'
+import { listModels, chatStream } from './lib/llm'
+import {
+  buildChapterContext,
+  buildSummaryRequest,
+  chapterSummarySection,
+  characterText,
+  effectiveMaxTokens,
+  renderSystemPrompt,
+  toMessages,
+  worldText,
+} from './lib/prompts'
+import {
+  activeChapter,
+  activeChapterIndex,
+  addChapter,
+  chapterDisplayTitle,
+  deleteChapter,
+  enableChapters,
+  exportStoryText,
+  isChaptered,
+  normalizeDoc,
+  removeChapters,
+  renameChapter,
+  reorderChapter,
+  storyText,
+} from './lib/chapters'
+import { computeBudget, estimateTokens } from './lib/tokens'
 import TopBar from './components/TopBar.svelte'
+import ChapterOutline from './components/ChapterOutline.svelte'
 import EditorPane from './components/EditorPane.svelte'
 import StatusBar from './components/StatusBar.svelte'
 import ShortcutsModal from './components/ShortcutsModal.svelte'
@@ -46,6 +71,8 @@ let settings = $state<AppSettings>({
   fontFamily: 'serif',
   replyLength: 1024,
   rating: 0,
+  outlineOpen: true,
+  outlineWidth: 256,
 })
 
 // ---------- session state ----------
@@ -84,32 +111,47 @@ const replyCap = $derived(effectiveMaxTokens(activeProfile, settings.replyLength
 /** Content rating from the top-bar slider, clamped so hand-edited settings stay valid. */
 const rating = $derived(clampRating(settings.rating))
 
+const docChaptered = $derived(activeDoc ? isChaptered(activeDoc) : false)
+const currentChapter = $derived(activeDoc ? activeChapter(activeDoc) : null)
+const currentChapterIdx = $derived(activeDoc ? activeChapterIndex(activeDoc) : -1)
+const viewMode = $derived<'chapter' | 'story'>(docChaptered ? (activeDoc?.viewMode ?? 'chapter') : 'chapter')
+const outlineOpen = $derived(settings.outlineOpen ?? true)
+const outlineWidth = $derived(settings.outlineWidth ?? 256)
+let scrollToChapter = $state<{ id: string; seq: number } | null>(null)
+let scrollSeq = 0
+let summaryAbort: AbortController | null = null
+
 /**
  * Debounced/throttled story content used for word-count and context-budget estimates
  * so typing and 60ms streaming flushes don't re-scan the entire story on every frame.
  */
 let measuredContent = $state('')
-let lastMeasuredDocId: string | null = null
+let measuredTotal = $state('')
+let lastMeasuredKey: string | null = null
 let wasGenerating = false
 
 $effect(() => {
   const d = activeDoc
-  const content = d?.content ?? ''
-  const docId = d?.id ?? null
+  const chapter = currentChapter
+  const content = d ? (docChaptered && viewMode === 'chapter' ? (chapter?.content ?? '') : storyText(d)) : ''
+  const total = d ? storyText(d) : ''
+  const key = d ? `${d.id}:${viewMode}:${chapter?.id ?? 'none'}` : null
   const generating = genStats.active
 
   if (!d) {
     measuredContent = ''
-    lastMeasuredDocId = null
+    measuredTotal = ''
+    lastMeasuredKey = null
     wasGenerating = false
     return
   }
 
-  // Update immediately when switching docs, finishing a generation, or opening ContextModal.
-  if (docId !== lastMeasuredDocId || (wasGenerating && !generating) || contextOpen) {
-    lastMeasuredDocId = docId
+  // Update immediately when switching docs/chapters, finishing a generation, or opening ContextModal.
+  if (key !== lastMeasuredKey || (wasGenerating && !generating) || contextOpen) {
+    lastMeasuredKey = key
     wasGenerating = generating
     measuredContent = content
+    measuredTotal = total
     return
   }
 
@@ -117,23 +159,30 @@ $effect(() => {
   const delay = generating ? 500 : 250
   const t = setTimeout(() => {
     measuredContent = content
+    measuredTotal = total
   }, delay)
   return () => clearTimeout(t)
 })
 
-const activeWordCount = $derived(activeDoc ? wordCount(measuredContent) : 0)
+const activeWordCount = $derived(activeDoc ? wordCount(measuredTotal) : 0)
+const activeChapterWordCount = $derived(
+  activeDoc && docChaptered && viewMode === 'chapter' ? wordCount(measuredContent) : null,
+)
 
 /** Approximate token budget for the active doc, shown in the Context tab. */
 const budget = $derived.by((): BudgetBreakdown | null => {
   const d = activeDoc
   const p = activeProfile
   if (!d || !p) return null
+  const chapterCtx = buildChapterContext(d)
+  const summaryText = chapterCtx ? chapterSummarySection(chapterCtx) : ''
   const b = computeBudget({
     maxContext,
     systemPrompt: renderSystemPrompt(p, d, rating),
     worldText: worldText(d),
     characterText: characterText(d),
     toneText: d.tone,
+    summaryText,
     storyContent: measuredContent,
     reserveTokens: replyCap,
   })
@@ -141,6 +190,7 @@ const budget = $derived.by((): BudgetBreakdown | null => {
     systemTokens: b.systemTokens,
     worldTokens: b.worldTokens,
     characterTokens: b.characterTokens,
+    summaryTokens: b.summaryTokens,
     storyTokens: b.storyTokens,
     reserveTokens: b.reserveTokens,
     storyTrimmed: b.fitsStoryChars < measuredContent.length,
@@ -162,7 +212,7 @@ async function loadAll() {
       idbGetAll<AppSettings>('settings'),
       idbGetAll<GenerationRecord>('generations'),
     ])
-    docs = d.sort((a, b) => b.updatedAt - a.updatedAt)
+    docs = d.map(normalizeDoc).sort((a, b) => b.updatedAt - a.updatedAt)
     for (const doc of docs) savedDocVersions.set(doc.id, doc.updatedAt)
     profiles = p
     const saved = s[0]
@@ -548,7 +598,7 @@ function importProjectText(text: string, sourceName: string) {
 }
 
 function exportDoc(doc: StoryDoc) {
-  downloadFile(`${slugify(doc.title)}.txt`, doc.content, 'text/plain')
+  downloadFile(`${slugify(doc.title)}.txt`, exportStoryText(doc), 'text/plain')
 }
 
 /** Save the whole workspace (stories + world data, server profiles, history) to a portable .json. */
@@ -676,6 +726,206 @@ function openServers() {
   serversOpen = true
 }
 
+// ---------- chapter actions ----------
+function guardNotGenerating(): boolean {
+  if (!genStats.active) return true
+  showToast('Stop the current generation first.', 'error')
+  return false
+}
+
+function handleSelectChapter(id: string) {
+  if (!activeDoc || !docChaptered) return
+  if (genStats.active && id !== currentChapter?.id) {
+    showToast('Stop the current generation first.', 'error')
+    return
+  }
+  activeDoc.activeChapterId = id
+  if (viewMode === 'story') {
+    scrollToChapter = { id, seq: ++scrollSeq }
+  }
+}
+
+function handleStepChapter(dir: -1 | 1) {
+  if (!activeDoc || !docChaptered || !activeDoc.chapters) return
+  const nextIdx = currentChapterIdx + dir
+  if (nextIdx < 0 || nextIdx >= activeDoc.chapters.length) return
+  handleSelectChapter(activeDoc.chapters[nextIdx].id)
+}
+
+function handleSetViewMode(mode: 'chapter' | 'story') {
+  if (!activeDoc || !docChaptered) return
+  if (genStats.active && mode !== viewMode) {
+    showToast('Stop the current generation first.', 'error')
+    return
+  }
+  activeDoc.viewMode = mode
+  activeDoc.updatedAt = Date.now()
+}
+
+function handleEnableChapters() {
+  if (!activeDoc || docChaptered || !guardNotGenerating()) return
+  enableChapters(activeDoc)
+  settings.outlineOpen = true
+}
+
+function handleRemoveChapters() {
+  if (!activeDoc || !docChaptered || !guardNotGenerating()) return
+  const d = activeDoc
+  askConfirm(
+    'Disable chapters',
+    'Merge all chapters back into a single story? Per-chapter summaries will be discarded.',
+    () => {
+      removeChapters(d)
+    },
+    'Disable',
+  )
+}
+
+function handleAddChapter() {
+  if (!activeDoc || !guardNotGenerating()) return
+  addChapter(activeDoc)
+}
+
+function handleRenameChapter(id: string, title: string) {
+  if (!activeDoc || !guardNotGenerating()) return
+  renameChapter(activeDoc, id, title)
+}
+
+function handleReorderChapter(fromId: string, toId: string) {
+  if (!activeDoc || !guardNotGenerating()) return
+  reorderChapter(activeDoc, fromId, toId)
+}
+
+function handleDeleteChapter(id: string) {
+  if (!activeDoc?.chapters || !guardNotGenerating()) return
+  const ch = activeDoc.chapters.find((c) => c.id === id)
+  if (!ch) return
+  const idx = activeDoc.chapters.indexOf(ch)
+  const title = chapterDisplayTitle(ch, idx)
+  const words = wordCount(ch.content)
+  const d = activeDoc
+  askConfirm(
+    'Delete chapter',
+    `Delete chapter "${title}" and its ${words.toLocaleString()} words? This cannot be undone.`,
+    () => {
+      deleteChapter(d, id)
+    },
+    'Delete',
+  )
+}
+
+function handleUpdateSummary(id: string, summary: string) {
+  if (!activeDoc?.chapters) return
+  const ch = activeDoc.chapters.find((c) => c.id === id)
+  if (!ch) return
+  const trimmed = summary.trim()
+  if ((ch.summary ?? '') === trimmed) return
+  ch.summary = trimmed || undefined
+  ch.summaryUpdatedAt = trimmed ? Date.now() : undefined
+  ch.summarySource = trimmed ? 'manual' : undefined
+  ch.summaryStale = false
+  activeDoc.updatedAt = Date.now()
+}
+
+function handleDismissStaleSummary(id: string) {
+  if (!activeDoc?.chapters) return
+  const ch = activeDoc.chapters.find((c) => c.id === id)
+  if (!ch || !ch.summaryStale) return
+  ch.summaryStale = false
+  activeDoc.updatedAt = Date.now()
+}
+
+async function runSummarize(doc: StoryDoc, chapterId: string) {
+  const ch = doc.chapters?.find((c) => c.id === chapterId)
+  if (!ch || !activeProfile || !activeProfile.modelId) return
+  const req = buildSummaryRequest(activeProfile, doc, ch, maxContext, rating)
+  const estPrompt = estimateTokens(req.systemPrompt + '\n' + req.userMessage)
+  const effParams = { ...activeProfile.params, maxTokens: 256 }
+  const controller = new AbortController()
+  summaryAbort = controller
+  genStats = { active: true, promptTokens: estPrompt, completionTokens: 0, label: 'Summarizing' }
+  let full = ''
+  try {
+    const result = await chatStream(
+      activeProfile.baseUrl,
+      activeProfile.apiKey,
+      activeProfile.modelId,
+      toMessages(req.systemPrompt, req.userMessage),
+      effParams,
+      controller.signal,
+      {
+        onToken: (t) => {
+          full += t
+        },
+        onUsage: (u) => {
+          genStats = {
+            active: true,
+            promptTokens: u.prompt_tokens ?? estPrompt,
+            completionTokens: u.completion_tokens ?? estimateTokens(full),
+            label: 'Summarizing',
+          }
+        },
+      },
+    )
+    const trimmed = full.trim()
+    if (!trimmed) {
+      showToast('The model returned an empty summary.', 'error')
+      return
+    }
+    ch.summary = trimmed
+    ch.summaryUpdatedAt = Date.now()
+    ch.summarySource = 'auto'
+    ch.summaryStale = false
+    doc.updatedAt = Date.now()
+    const idx = doc.chapters?.indexOf(ch) ?? -1
+    handleGeneration({
+      id: uid(),
+      ts: Date.now(),
+      docId: doc.id,
+      model: activeProfile.modelId,
+      op: 'custom',
+      instruction: 'Summarize chapter',
+      params: effParams,
+      systemPrompt: req.systemPrompt,
+      output: trimmed,
+      promptTokens: result.promptTokens ?? estPrompt,
+      completionTokens: result.completionTokens ?? estimateTokens(trimmed),
+      chapterId: ch.id,
+      chapterTitle: idx >= 0 ? chapterDisplayTitle(ch, idx) : undefined,
+    })
+  } catch (e) {
+    const err = e as Error
+    if (err.name !== 'AbortError') {
+      showToast(err.message || 'Summary generation failed', 'error')
+    }
+  } finally {
+    summaryAbort = null
+    genStats = { active: false, promptTokens: 0, completionTokens: 0 }
+  }
+}
+
+function handleSummarizeChapter(id: string) {
+  if (!activeDoc?.chapters || !guardNotGenerating()) return
+  const ch = activeDoc.chapters.find((c) => c.id === id)
+  if (!ch) return
+  if (!activeProfile) {
+    showToast('Set up a server profile first (gear icon → Servers).', 'error')
+    return
+  }
+  if (!activeProfile.modelId) {
+    showToast('Select a model for this profile first (gear icon → Servers).', 'error')
+    return
+  }
+  const d = activeDoc
+  if (ch.summary?.trim()) {
+    askConfirm('Replace summary', 'Replace the current summary?', () => {
+      void runSummarize(d, id)
+    }, 'Replace')
+  } else {
+    void runSummarize(d, id)
+  }
+}
+
 // ---------- generation callbacks ----------
 function handleGeneration(g: GenerationRecord) {
   generations.unshift(g)
@@ -705,6 +955,13 @@ $effect(() => {
     if (e.key === 'F1') {
       e.preventDefault()
       shortcutsOpen = !shortcutsOpen
+      return
+    }
+    if (mod && e.shiftKey && e.key.toLowerCase() === 'l') {
+      if (docChaptered) {
+        e.preventDefault()
+        settings.outlineOpen = !outlineOpen
+      }
       return
     }
     if (mod && !e.shiftKey && e.key === 'Enter') {
@@ -764,13 +1021,31 @@ $effect(() => {
       if (!activeDoc || genStats.active) return
       commandRef = { kind: 'op', op }
     }}
-    onOpenCustom={() => (commandRef = { kind: 'open-custom' })}
-    onOpenInstruct={() => (commandRef = { kind: 'open-instruct' })}
-    onStop={() => (commandRef = { kind: 'stop' })}
+    onOpenCustom={() => {
+      commandRef = { kind: 'open-custom' }
+    }}
+    onOpenInstruct={() => {
+      commandRef = { kind: 'open-instruct' }
+    }}
+    onStop={() => {
+      summaryAbort?.abort()
+      commandRef = { kind: 'stop' }
+    }}
     replyLength={settings.replyLength}
     onSetReplyLength={(n) => (settings.replyLength = n)}
     rating={rating}
     onSetRating={(r: ContentRating) => (settings.rating = r)}
+    isChaptered={docChaptered}
+    outlineOpen={outlineOpen}
+    viewMode={viewMode}
+    chapterIndex={currentChapterIdx}
+    chapterCount={activeDoc?.chapters?.length ?? 0}
+    chapterTitle={currentChapter && currentChapterIdx >= 0 ? chapterDisplayTitle(currentChapter, currentChapterIdx) : ''}
+    onToggleOutline={() => (settings.outlineOpen = !outlineOpen)}
+    onSetViewMode={handleSetViewMode}
+    onStepChapter={handleStepChapter}
+    onEnableChapters={handleEnableChapters}
+    onRemoveChapters={handleRemoveChapters}
   />
 
   <div class="flex min-h-0 flex-1">
@@ -779,10 +1054,31 @@ $effect(() => {
         <i class="fa-solid fa-spinner fa-spin mr-2"></i>Loading…
       </div>
     {:else if activeDoc}
+      {#if docChaptered}
+        <ChapterOutline
+          doc={activeDoc}
+          genActive={genStats.active}
+          open={outlineOpen}
+          width={outlineWidth}
+          onToggleOpen={() => (settings.outlineOpen = !outlineOpen)}
+          onResize={(w) => (settings.outlineWidth = w)}
+          onSelectChapter={handleSelectChapter}
+          onAddChapter={handleAddChapter}
+          onRenameChapter={handleRenameChapter}
+          onReorderChapter={handleReorderChapter}
+          onDeleteChapter={handleDeleteChapter}
+          onSummarizeChapter={handleSummarizeChapter}
+          onUpdateSummary={handleUpdateSummary}
+          onDismissStaleSummary={handleDismissStaleSummary}
+        />
+      {/if}
       <div class="flex min-h-0 min-w-0 flex-1">
-        {#key activeDoc.id}
+        {#key activeDoc.id + ':' + (viewMode === 'story' ? 'all' : (currentChapter?.id ?? 'none'))}
           <EditorPane
             doc={activeDoc}
+            chapterId={docChaptered && viewMode === 'chapter' ? (currentChapter?.id ?? null) : null}
+            storyMode={docChaptered && viewMode === 'story'}
+            scrollToChapter={scrollToChapter}
             profile={activeProfile}
             command={commandRef}
             maxContext={maxContext}
@@ -796,6 +1092,9 @@ $effect(() => {
             onGeneration={handleGeneration}
             onGenStats={(s) => (genStats = s)}
             onSelectionChange={(info) => (selection = info)}
+            onFocusChapter={(id) => {
+              if (activeDoc) activeDoc.activeChapterId = id
+            }}
             onError={(m) => showToast(m, 'error')}
           />
         {/key}
@@ -819,6 +1118,7 @@ $effect(() => {
 
   <StatusBar
     words={activeWordCount}
+    chapterWords={activeChapterWordCount}
     budget={budget}
     maxContext={maxContext}
     exceedsModel={contextExceedsModel}

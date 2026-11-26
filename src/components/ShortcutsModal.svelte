@@ -17,6 +17,7 @@ $effect(() => {
       <li class="flex items-center justify-between gap-4"><span>Expand selection</span><span><kbd class="kbd kbd-sm">Ctrl</kbd> <kbd class="kbd kbd-sm">Shift</kbd> <kbd class="kbd kbd-sm">E</kbd></span></li>
       <li class="flex items-center justify-between gap-4"><span>Condense selection</span><span><kbd class="kbd kbd-sm">Ctrl</kbd> <kbd class="kbd kbd-sm">Shift</kbd> <kbd class="kbd kbd-sm">C</kbd></span></li>
       <li class="flex items-center justify-between gap-4"><span>Grammar-fix selection</span><span><kbd class="kbd kbd-sm">Ctrl</kbd> <kbd class="kbd kbd-sm">Shift</kbd> <kbd class="kbd kbd-sm">G</kbd></span></li>
+      <li class="flex items-center justify-between gap-4"><span>Toggle chapters outline</span><span><kbd class="kbd kbd-sm">Ctrl</kbd> <kbd class="kbd kbd-sm">Shift</kbd> <kbd class="kbd kbd-sm">L</kbd></span></li>
       <li class="flex items-center justify-between gap-4"><span>Show this help</span><kbd class="kbd kbd-sm">F1</kbd></li>
       <li class="flex items-center justify-between gap-4"><span>Close dialogs</span><kbd class="kbd kbd-sm">Esc</kbd></li>
     </ul>

@@ -4,6 +4,7 @@
 // saved server profiles, and the recent generation history — not just the text.
 
 import type {
+  Chapter,
   CharacterCard,
   GenerationRecord,
   OpKind,
@@ -13,10 +14,11 @@ import type {
   WorldNote,
 } from './types'
 import { uid } from './format'
+import { normalizeDoc as normalizeChapteredDoc } from './chapters'
 
 export const PROJECT_FORMAT = 'pairquill-project'
 const LEGACY_PROJECT_FORMAT = 'pairui-project'
-const PROJECT_VERSION = 1
+const PROJECT_VERSION = 2
 
 /** The on-disk shape of a saved project file. */
 export interface ProjectFile {
@@ -45,9 +47,37 @@ function normalizeCharacter(raw: unknown): CharacterCard {
   return { id: str(c.id) || uid(), name: str(c.name), description: str(c.description) }
 }
 
+function normalizeChapter(raw: unknown): Chapter | null {
+  if (typeof raw !== 'object' || raw === null) return null
+  const c = obj(raw)
+  let content = ''
+  if (typeof c.content === 'string') {
+    content = c.content
+  } else if (c.content !== undefined && c.content !== null) {
+    console.warn('Chapter content was not a string; coercing to string.')
+    content = String(c.content)
+  }
+  const ch: Chapter = {
+    id: str(c.id) || uid(),
+    title: str(c.title, 'Untitled chapter'),
+    content,
+  }
+  if (typeof c.summary === 'string') ch.summary = c.summary
+  if (typeof c.summaryUpdatedAt === 'number' && Number.isFinite(c.summaryUpdatedAt)) {
+    ch.summaryUpdatedAt = c.summaryUpdatedAt
+  }
+  if (c.summarySource === 'auto' || c.summarySource === 'manual') {
+    ch.summarySource = c.summarySource
+  }
+  if (typeof c.summaryStale === 'boolean') {
+    ch.summaryStale = c.summaryStale
+  }
+  return ch
+}
+
 function normalizeDoc(raw: unknown): StoryDoc {
   const d = obj(raw)
-  return {
+  const doc: StoryDoc = {
     id: str(d.id) || uid(),
     title: str(d.title, 'Imported story'),
     content: str(d.content),
@@ -59,6 +89,17 @@ function normalizeDoc(raw: unknown): StoryDoc {
     contextOverride:
       typeof d.contextOverride === 'number' && Number.isFinite(d.contextOverride) ? d.contextOverride : null,
   }
+  if (Array.isArray(d.chapters) && d.chapters.length > 0) {
+    const parsed = d.chapters.map(normalizeChapter).filter((c): c is Chapter => c !== null)
+    if (parsed.length > 0) {
+      doc.chapters = parsed
+      doc.activeChapterId = str(d.activeChapterId) || null
+      doc.viewMode = d.viewMode === 'story' ? 'story' : 'chapter'
+      doc.includeChapterSummaries = Boolean(d.includeChapterSummaries)
+      normalizeChapteredDoc(doc)
+    }
+  }
+  return doc
 }
 
 function normalizeParams(raw: unknown): SamplingParams {
@@ -102,6 +143,8 @@ function normalizeGeneration(raw: unknown): GenerationRecord {
     output: str(g.output),
     promptTokens: typeof g.promptTokens === 'number' ? g.promptTokens : undefined,
     completionTokens: typeof g.completionTokens === 'number' ? g.completionTokens : undefined,
+    ...(typeof g.chapterId === 'string' ? { chapterId: g.chapterId } : {}),
+    ...(typeof g.chapterTitle === 'string' ? { chapterTitle: g.chapterTitle } : {}),
   }
 }
 
@@ -117,10 +160,14 @@ export function parseProjectFile(text: string): ProjectFile {
   if (root.format !== PROJECT_FORMAT && root.format !== LEGACY_PROJECT_FORMAT) {
     throw new Error('not a PairQuill project file (saved with "Save project")')
   }
+  const version = num(root.version, 1)
+  if (version !== 1 && version !== 2) {
+    throw new Error(`unsupported project file version (${version})`)
+  }
   if (!Array.isArray(root.docs)) throw new Error('project file is missing its story list')
   return {
     format: PROJECT_FORMAT,
-    version: num(root.version, 1),
+    version,
     exportedAt: num(root.exportedAt, Date.now()),
     docs: root.docs.map(normalizeDoc),
     profiles: Array.isArray(root.profiles) ? root.profiles.map(normalizeProfile) : [],

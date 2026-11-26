@@ -15,6 +15,7 @@ interface ContextBudget {
   systemTokens: number
   worldTokens: number
   characterTokens: number
+  summaryTokens: number
   storyTokens: number
   reserveTokens: number
   used: number
@@ -28,6 +29,7 @@ export function computeBudget(opts: {
   worldText: string
   characterText: string
   toneText: string
+  summaryText?: string
   storyContent: string
   reserveTokens: number
 }): ContextBudget {
@@ -35,8 +37,9 @@ export function computeBudget(opts: {
   const systemTokens = estimateTokens(opts.systemPrompt)
   const worldTokens = estimateTokens(opts.worldText + '\n' + opts.toneText)
   const characterTokens = estimateTokens(opts.characterText)
+  const summaryTokens = opts.summaryText ? estimateTokens(opts.summaryText) : 0
 
-  const available = Math.max(0, max - systemTokens - worldTokens - characterTokens - opts.reserveTokens)
+  const available = Math.max(0, max - systemTokens - worldTokens - characterTokens - summaryTokens - opts.reserveTokens)
   // ~4 chars per token for the tail slice; then re-estimate precisely from the end.
   let fitsStoryChars = Math.floor(available * 4)
   const full = opts.storyContent
@@ -59,9 +62,10 @@ export function computeBudget(opts: {
     systemTokens,
     worldTokens,
     characterTokens,
+    summaryTokens,
     storyTokens,
     reserveTokens: opts.reserveTokens,
-    used: systemTokens + worldTokens + characterTokens + storyTokens,
+    used: systemTokens + worldTokens + characterTokens + summaryTokens + storyTokens,
     fitsStoryChars,
   }
 }

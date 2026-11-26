@@ -37,6 +37,17 @@
     onSetReplyLength,
     rating,
     onSetRating,
+    isChaptered = false,
+    outlineOpen = true,
+    viewMode = "chapter",
+    chapterIndex = 0,
+    chapterCount = 0,
+    chapterTitle = "",
+    onToggleOutline,
+    onSetViewMode,
+    onStepChapter,
+    onEnableChapters,
+    onRemoveChapters,
   }: {
     theme: ThemeName;
     hasDoc: boolean;
@@ -74,6 +85,17 @@
     /** Content rating for generated prose (Generation section in the menu). */
     rating: ContentRating;
     onSetRating: (rating: ContentRating) => void;
+    isChaptered?: boolean;
+    outlineOpen?: boolean;
+    viewMode?: "chapter" | "story";
+    chapterIndex?: number;
+    chapterCount?: number;
+    chapterTitle?: string;
+    onToggleOutline?: () => void;
+    onSetViewMode?: (m: "chapter" | "story") => void;
+    onStepChapter?: (dir: -1 | 1) => void;
+    onEnableChapters?: () => void;
+    onRemoveChapters?: () => void;
   } = $props();
 
   let menuOpen = $state(false);
@@ -206,6 +228,32 @@
           <i class="fa-solid fa-globe w-4 text-center"></i>
           <span>World</span>
         </button>
+        {#if hasDoc && !isChaptered && onEnableChapters}
+          <button
+            role="menuitem"
+            class={ITEM}
+            onclick={() => {
+              menuOpen = false;
+              onEnableChapters();
+            }}
+          >
+            <i class="fa-solid fa-list-ul w-4 text-center"></i>
+            <span>Enable chapters</span>
+          </button>
+        {:else if hasDoc && isChaptered && onRemoveChapters}
+          <button
+            role="menuitem"
+            class={ITEM}
+            disabled={genStats.active}
+            onclick={() => {
+              menuOpen = false;
+              onRemoveChapters();
+            }}
+          >
+            <i class="fa-solid fa-link-slash w-4 text-center"></i>
+            <span>Disable chapters</span>
+          </button>
+        {/if}
 
         {#if hasDoc}
           <div class="my-1 border-t border-base-300"></div>
@@ -478,6 +526,61 @@
     <i class="fa-solid fa-feather-pointed text-lg text-primary"></i>
     <span class="hidden font-semibold tracking-tight sm:inline">PairQuill</span>
   </span>
+
+  <span class="flex-1"></span>
+
+  {#if hasDoc && isChaptered}
+    <div class="flex items-center gap-2" data-chapter-controls>
+      <div
+        class="flex overflow-hidden rounded-md border border-base-300 text-xs"
+        role="group"
+        aria-label="View mode"
+      >
+        <button
+          class={`px-2 py-1 leading-tight ${viewMode === "chapter" ? "bg-primary text-primary-content" : "hover:bg-base-300"}`}
+          onclick={() => onSetViewMode?.("chapter")}
+        >
+          Chapter
+        </button>
+        <button
+          class={`px-2 py-1 leading-tight ${viewMode === "story" ? "bg-primary text-primary-content" : "hover:bg-base-300"}`}
+          onclick={() => onSetViewMode?.("story")}
+        >
+          Full story
+        </button>
+      </div>
+
+      <div
+        class="hidden items-center gap-0.5 rounded-md border border-base-300 bg-base-200/50 px-1 py-0.5 text-xs md:flex"
+      >
+        <button
+          class="btn btn-ghost btn-xs h-5 min-h-0 w-5 p-0"
+          aria-label="Previous chapter"
+          title="Previous chapter"
+          disabled={chapterIndex <= 0}
+          onclick={() => onStepChapter?.(-1)}
+        >
+          <i class="fa-solid fa-chevron-left text-[10px]"></i>
+        </button>
+        <button
+          class="max-w-44 truncate px-1.5 text-left hover:underline"
+          title={`Ch. ${chapterIndex + 1} of ${chapterCount} · ${chapterTitle}`}
+          onclick={() => onToggleOutline?.()}
+        >
+          Ch. {chapterIndex + 1} of {chapterCount} · {chapterTitle}
+        </button>
+        <button
+          class="btn btn-ghost btn-xs h-5 min-h-0 w-5 p-0"
+          aria-label="Next chapter"
+          title="Next chapter"
+          disabled={chapterIndex >= chapterCount - 1}
+          onclick={() => onStepChapter?.(1)}
+        >
+          <i class="fa-solid fa-chevron-right text-[10px]"></i>
+        </button>
+      </div>
+    </div>
+  {/if}
 
   <!-- Hidden picker shared by the menu's "Import file…" item -->
   <input
