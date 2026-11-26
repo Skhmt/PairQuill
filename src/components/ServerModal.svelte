@@ -398,11 +398,28 @@
                 setField("apiKey", (e.target as HTMLInputElement).value)}
             />
           </label>
+          <label class="form-control text-xs opacity-70"
+            >Temperature
+            <input
+              type="number"
+              min={0}
+              max={2}
+              step={0.1}
+              class="input input-bordered input-sm mt-1"
+              value={profile.params.temperature}
+              onchange={(e) => {
+                if (profile)
+                  profile.params.temperature = Number(
+                    (e.target as HTMLInputElement).value,
+                  );
+              }}
+            />
+          </label>
           <!-- z-10 on the label (not an opaque/opacity-dimmed wrapper) so the z-20 dropdown
                stacks above later siblings without creating a dimming stacking context. The
                refresh button lives in the input row below: the list anchors to that row's
                edges, so it can never open over the button itself. -->
-          <label class="relative z-10 form-control text-xs" data-model-combo>
+          <label class="relative z-10 form-control text-xs sm:col-span-2" data-model-combo>
             <span class="opacity-70">Model ID</span>
             <div class="relative mt-1 flex items-center gap-1.5">
               <input
@@ -477,39 +494,6 @@
                 </div>
               {/if}
             </div>
-          </label>
-          <label class="form-control text-xs opacity-70"
-            >Temperature
-            <input
-              type="number"
-              min={0}
-              max={2}
-              step={0.1}
-              class="input input-bordered input-sm mt-1"
-              value={profile.params.temperature}
-              onchange={(e) => {
-                if (profile)
-                  profile.params.temperature = Number(
-                    (e.target as HTMLInputElement).value,
-                  );
-              }}
-            />
-          </label>
-          <label class="form-control text-xs opacity-70"
-            >Max tokens (hard cap · 0 = reply length slider)
-            <input
-              type="number"
-              min={0}
-              step={64}
-              class="input input-bordered input-sm mt-1"
-              value={profile.params.maxTokens}
-              onchange={(e) => {
-                if (profile)
-                  profile.params.maxTokens = Number(
-                    (e.target as HTMLInputElement).value,
-                  );
-              }}
-            />
           </label>
         </div>
 

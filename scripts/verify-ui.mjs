@@ -746,6 +746,10 @@ try {
   await unfocusModelInput()
   await modelInput.click() // refits with the new viewport
   await page.waitForTimeout(300)
+  // On phone width fitDropdown also nudges the box scroll so the list has room below the
+  // input — that moves the button between the pre-open capture and the open state, so the
+  // overlap check must compare against the button's final (post-open) position.
+  btnBox11 = await refreshBtn.boundingBox()
   const dir2 = await dirOf11()
   check(
     `T11 server modal: list opened ${dir2} does not cover the refresh button`,
