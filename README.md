@@ -1,146 +1,141 @@
 # PairQuill
 
-A lightweight, distraction-free writing studio for collaborative storytelling with local and remote LLMs.
+A local-first AI co-writing studio for interactive fiction. Write your story, point it at any OpenAI-compatible model, and keep authorship in your own hands — everything is stored on your machine, and requests go directly from the page to the endpoint you choose.
 
-PairQuill is built for authors who want AI assistance without the chatbox. Instead of feeling like a roleplay chat or messaging thread, PairQuill functions as an ergonomic word processor: your manuscript is plain text, generations stream directly into the document at the cursor, and targeted editing tools let you expand, condense, or polish selected passages on the fly.
+## Features
 
-Everything runs entirely in your browser—offline-first, with zero telemetry and no accounts required.
+- **Your data stays local.** Stories, world data, server profiles, and generation history live in the browser's IndexedDB (database `pairquill`). No accounts, no cloud; the only network traffic is between the page and your chosen model endpoint.
+- **Multi-story workspace.** Create, rename, import, export, and delete stories from the Stories modal. Each story carries world notes, character profiles, and tone/style notes that are injected into every prompt.
+- **Generation operations.** Continue from the cursor (`Ctrl+Enter`), continue with custom instructions (the Instruct dialog — works without a selection), retry the last generation (`Ctrl+Shift+Y`), or expand / condense / grammar-fix a highlighted passage, plus free-form custom instructions for a selection. Output streams live into the editor and AI-added text is highlighted until your next manual edit.
+- **Content rating.** A three-stop slider (Safe / Suggestive / Explicit) in the top-bar menu; matching guidance is injected into every system prompt so all operations respect it.
+- **Reply length control.** An exponential token slider for how long a reply may be, hard-capped by the profile's own max tokens, with a soft word-count hint when the cap is small enough to actually bite.
+- **Context budget management.** Uses each model's context window (reported by `/models`), reserves room for the reply, and trims the story tail to fit. The Context modal shows a per-section breakdown and lets you override the limit manually.
+- **Chapter mode.** A resizable outline sidebar with add / rename / drag-reorder / delete, per-chapter word counts, manual or AI-generated chapter summaries (injected as consistency context for non-current chapters), and Chapter vs. Full-story view modes. Generation targets only the active chapter.
+- **Server profiles.** Multiple named OpenAI-compatible endpoints — curated presets (aggregators, frontier labs, local runtimes) or any custom base URL — with a searchable model list showing context lengths and a one-click connection test.
+- **Portable projects.** Export any story as `.txt`; save the current story or the whole workspace as a `.json` project file; importing merges without overwriting local data.
+- **Appearance.** Seven DaisyUI themes, plus text size, line length, and font (serif / sans / mono) choices in the top-bar menu.
+- **Mobile-friendly.** The layout is responsive down to 320 px wide and audited by `scripts/mobile-audit.mjs`.
 
----
+## Getting started
 
-## Highlights
-
-* **Word-Processor Interaction**: Stream continuations right at your cursor, rewrite or expand selections, and edit seamlessly. AI additions are highlighted until your next edit so you always know what was written by the model.
-* **Selection-Targeted Operations**: Highlight any sentence or paragraph to run instant actions:
-  * **Expand**: Flesh out scenes with sensory detail and narrative depth.
-  * **Condense**: Cut redundancy and tighten prose while preserving tone and key facts.
-  * **Grammar**: Correct spelling and punctuation without altering authorial voice.
-  * **Custom Instruction**: Prompt the model to rewrite the selected passage according to your exact requirements.
-* **Worldbuilding & Story Bible**: Attach world lore, character cards, and tone/style guides to each story. These are dynamically injected into prompt templates so models maintain continuity.
-* **Live Token & Budget Meter**: Visual gauge tracking prompt budget (system prompt, world notes, characters, story tail, and reserve tokens) against the active model's context window.
-* **Universal OpenAI-Compatible Backend**: Connect out of the box to local inference engines (Ollama, LM Studio, llama.cpp, vLLM, KoboldCpp) or cloud endpoints (OpenRouter, Groq, OpenAI, etc.).
-* **Content Rating Control**: A three-stop slider in the top bar (SFW → Romance/Softcore → Explicit/Hardcore) injects matching guidance into the system prompt of every generation request. The choice persists with your settings, and custom prompt templates can place it exactly where they want via a `{rating}` placeholder.
-* **Offline-First & Local Storage**: Stories and configurations are persisted in browser IndexedDB (no 5MB localStorage limits), effortlessly handling manuscripts exceeding 200k+ words.
-* **Single-File Distribution**: Builds into a self-contained single `.html` file that can be opened directly from disk or hosted on static hosts (GitHub Pages, Cloudflare Pages).
-* **Full Data Sovereignty**: Export and import complete workspaces or single stories as `.json` project files, or export clean manuscripts as `.txt`.
-
----
-
-## Keyboard Shortcuts
-
-Designed for hands-on-keyboard writing sessions:
-
-| Action | Shortcut (Windows / Linux) | Shortcut (macOS) | Description |
-| :--- | :--- | :--- | :--- |
-| **Continue** | <kbd>Ctrl</kbd> + <kbd>Enter</kbd> | <kbd>⌘</kbd> + <kbd>Enter</kbd> | Stream generation from cursor position |
-| **Retry** | <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Y</kbd> | <kbd>⌘</kbd> + <kbd>Shift</kbd> + <kbd>Y</kbd> | Re-send last generation, replacing its output |
-| **Expand** | <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>E</kbd> | <kbd>⌘</kbd> + <kbd>Shift</kbd> + <kbd>E</kbd> | Expand selected text with richer detail |
-| **Condense** | <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>C</kbd> | <kbd>⌘</kbd> + <kbd>Shift</kbd> + <kbd>C</kbd> | Condense selected text |
-| **Grammar Fix** | <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>G</kbd> | <kbd>⌘</kbd> + <kbd>Shift</kbd> + <kbd>G</kbd> | Fix grammar, punctuation, and typos |
-| **Help** | <kbd>F1</kbd> | <kbd>F1</kbd> | Open keyboard shortcuts reference |
-| **Close / Dismiss** | <kbd>Esc</kbd> | <kbd>Esc</kbd> | Close active modal dialog or menu |
-
----
-
-## Quick Start
-
-### Prerequisites
-
-* [Node.js](https://nodejs.org/) (v20.19+ or v22.12+ — required by Vite 8)
-* [npm](https://www.npmjs.com/) (bundled with Node.js)
-
-### Installation
-
-Clone the repository and install dependencies:
+Prerequisites: a recent Node.js LTS (Vite 8 requires at least Node 20.19).
 
 ```bash
-git clone https://github.com/skhmt/pairquill.git
-cd pairquill
 npm install
-```
-
-### Development Server
-
-Start Vite's development server:
-
-```bash
 npm run dev
 ```
 
-Open the displayed localhost URL in your browser (typically `http://localhost:5173`).
+Then open the URL printed in the terminal (default `http://localhost:5173`). No environment variables or build step are needed for development.
 
-### Production Build
+`npm run build` produces a self-contained single-file `dist/index.html` (via `vite-plugin-singlefile`) that can be opened directly from disk — handy for trying the app without running a server.
 
-Compile the application into a single self-contained HTML file:
+## Scripts
 
-```bash
-npm run build
+| Command | What it does |
+| --- | --- |
+| `npm run dev` | Start the Vite dev server on all interfaces (`vite --host`). |
+| `npm run build` | Production build → self-contained `dist/index.html`. |
+| `npm run preview` | Serve the production build locally. |
+| `npm run check` | Type-check with `svelte-check` + `tsc`. |
+| `node scripts/verify-ui.mjs` | End-to-end UI verification against a self-contained mock OpenAI-compatible server (port 9877): top bar, Stories / World / Context modals, status bar, streaming generation, reply-length slider, and content-rating injection. |
+| `node scripts/verify-chapters.mjs` | Chapter-support E2E (mock server on port 9879): legacy-doc compatibility, chaptering flow, persistence across reload, per-chapter generation, summaries, full-story view, and v1/v2 project import/export. |
+| `node scripts/mobile-audit.mjs` | Mobile layout audit at 375×667, 360×800, and 320×568: top-bar clipping, status-bar wrapping + iOS zoom guard, server-modal fit, touch-visible actions, menu fit. |
+
+The verification scripts load `dist/index.html`, so run `npm run build` first; they drive Microsoft Edge via Playwright (`playwright-core`, channel `msedge`).
+
+## Server configuration
+
+Open **Server & model settings** (gear icon in the status bar). The modal has a profile list on the left and an editor on the right (stacked into one column on narrow screens).
+
+- **Presets.** `src/config/servers.json` ships curated endpoints grouped as *Aggregator*, *Frontier*, and *Local*, plus **Custom…** for anything else. Selecting a preset fills in the base URL and links to where you can get an API key when applicable.
+- **Fields per profile:** name, base URL (any OpenAI-compatible `/v1` endpoint), API key (optional for local runtimes), temperature (0–2), and model ID — a searchable list fetched from `GET {base}/models`, showing each model's context length.
+- **Test connection** hits the endpoint and refreshes the model list, reporting how many models were found or the error inline.
+- Pick the active profile and model in the status bar; the refresh button re-fetches the model list.
+
+### Prompt construction
+
+Every request's system prompt is rendered from the profile's template (or a built-in default) with these placeholders:
+
+| Placeholder | Content |
+| --- | --- |
+| `{world_notes}` | The story's world notes (`## title` sections) |
+| `{characters}` | Character profiles (`### name` + description) |
+| `{tone}` | Tone/style notes |
+| `{rating}` | The content-rating guidance block (appended automatically if the template omits it) |
+| `{chapters}` | "Story so far" summaries of non-current chapters (when chapter summaries are enabled) |
+
+## Chapter workflow
+
+1. **Enable chapters** from the top-bar menu — existing text becomes a single chapter (or start fresh).
+2. Manage chapters in the outline sidebar: **New** adds one after the active chapter, click to select, double-click (or the pen icon) to rename, drag rows to reorder, and the trash icon deletes (deleting the last chapter converts the story back to plain single-document mode). The sidebar is collapsible and resizable (180–480 px).
+3. Switch between **Chapter** and **Full story** views in the top bar — full-story view is read-only with separators; the "Ch. X of Y · Title" label and prev/next buttons navigate chapters.
+4. **Summaries:** each chapter has a summary box in the outline — write it manually or click **Auto** for an AI 3–5 sentence summary. A stale warning appears if the chapter is edited after summarizing. Toggle whether summaries are sent to the model in the Context modal (*Include chapter summaries*); only non-current chapters with a summary are included.
+5. **Generate:** Continue / Instruct operate on the active chapter only; the status bar shows chapter and total word counts.
+6. **Disable chapters** from the menu merges everything back into one document — lossless.
+
+## Keyboard shortcuts
+
+| Action | Shortcut |
+| --- | --- |
+| Continue from cursor | `Ctrl+Enter` |
+| Retry last generation | `Ctrl+Shift+Y` |
+| Expand selection | `Ctrl+Shift+E` |
+| Condense selection | `Ctrl+Shift+C` |
+| Grammar-fix selection | `Ctrl+Shift+G` |
+| Toggle chapters outline | `Ctrl+Shift+L` |
+| Show shortcuts help | `F1` |
+| Close a dialog or the menu | `Esc` |
+
+On macOS, hold `⌘` instead of `Ctrl`. Selection operations (expand / condense / grammar / custom) require a highlighted passage.
+
+## Mobile support
+
+- The top bar and status bar wrap rather than clip; **Continue** stays reachable down to 320 px wide.
+- Status-bar controls use ≥16 px fonts so iOS does not auto-zoom on focus.
+- Chapter row actions (rename / delete) are always visible on touch devices — no hover required.
+- The server settings modal collapses to a single column on narrow screens, and the hamburger menu fits the viewport.
+- All of the above is covered by `scripts/mobile-audit.mjs` (375×667, 360×800, 320×568).
+
+## Project structure
+
 ```
-
-The output bundle is generated at `dist/index.html`. You can double-click this file to run PairQuill locally in any modern browser without needing a web server, or upload it to any static hosting provider.
-
-### Type Checking & UI Verification
-
-Run Svelte and TypeScript checks:
-
-```bash
-npm run check
+PairQuill/
+├── index.html                  # app entry point
+├── vite.config.ts              # Vite + Svelte + Tailwind v4 + single-file output
+├── svelte.config.js
+├── tsconfig*.json
+├── src/
+│   ├── main.ts                 # bootstrap
+│   ├── app.css                 # Tailwind + DaisyUI theme setup
+│   ├── App.svelte              # state, persistence, generation orchestration
+│   ├── components/
+│   │   ├── TopBar.svelte       # hamburger menu (Stories / World / chapters, rating & length sliders, appearance), chapter nav, generation controls
+│   │   ├── EditorPane.svelte   # story/chapter textareas, selection ops, custom-instruction + instruct dialogs
+│   │   ├── ChapterOutline.svelte  # outline sidebar: add / rename / reorder / delete, summaries
+│   │   ├── StatusBar.svelte    # word count, context gauge, profile/model pickers, settings gear
+│   │   ├── ServerModal.svelte  # server profiles: presets, endpoints, models, connection test
+│   │   ├── ContextModal.svelte # context budget breakdown + manual override
+│   │   ├── StoriesModal.svelte # story list: new / import / export / delete
+│   │   ├── WorldModal.svelte   # world notes, characters, tone
+│   │   ├── ShortcutsModal.svelte  # keyboard shortcuts reference (F1)
+│   │   └── AboutModal.svelte   # about dialog
+│   ├── config/
+│   │   └── servers.json        # curated endpoint presets
+│   └── lib/
+│       ├── types.ts            # shared types (StoryDoc, ServerProfile, AppSettings, ...)
+│       ├── idb.ts              # IndexedDB persistence (db "pairquill")
+│       ├── llm.ts              # OpenAI-compatible client: /models + streaming chat completions
+│       ├── prompts.ts          # system prompt templates, rating guidance, per-op messages
+│       ├── tokens.ts           # token estimates and context budget computation
+│       ├── chapters.ts         # chapter model: enable / add / rename / reorder / delete helpers
+│       ├── project.ts          # .json project file build/parse (v1/v2 compatible)
+│       └── format.ts           # word count, time-ago, and other formatting helpers
+└── scripts/
+    ├── verify-ui.mjs           # E2E UI verification (mock server :9877)
+    ├── verify-chapters.mjs     # chapter-support E2E (mock server :9879)
+    └── mobile-audit.mjs        # narrow-viewport layout audit
 ```
-
-Run the automated end-to-end UI verification suite (requires [Microsoft Edge](https://www.microsoft.com/edge), launched via Playwright):
-
-```bash
-node scripts/verify-ui.mjs
-```
-
----
-
-## Connecting an LLM Server
-
-PairQuill communicates with any server exposing an OpenAI-compatible `/v1/chat/completions` endpoint. Enter the API root — a trailing `/v1` is appended automatically when it's missing, so both `http://127.0.0.1:8888` and `http://127.0.0.1:8888/v1` work.
-
-To configure a server, click the **gear icon** in the status bar (bottom right) or select a profile.
-
-Click **Test connection** to verify connectivity and automatically populate the model dropdown.
-
----
-
-## Content Rating
-
-The top bar includes a three-stop **content rating** slider that controls how the model is guided on generated prose:
-
-| Stop | Label | Guidance |
-| :--- | :--- | :--- |
-| 0 | SFW | Safe-for-work content only; romantic feelings may be implied, but physical intimacy stops at a kiss. |
-| 1 | Suggestive | Romantic and sensual content at a softcore level; fade to black before anything explicit. |
-| 2 | Explicit | Explicit content is permitted when the story calls for it, written with direct detail and high prose quality. |
-
-The selected stop is injected into the **system prompt of every request** — continuations, retries, and selection operations alike:
-
-* If a server profile's prompt template contains a `{rating}` placeholder, the full rating block (`Content rating: <label>` plus its guidance) is substituted in place.
-* Templates without the placeholder get the rating block appended to the end of the system prompt, so no request can ever miss the selected guidance.
-
-The choice is clamped to the three valid stops and persisted with your app settings (legacy saves without a stored value default to SFW).
-
----
-
-## Architecture & Data Storage
-
-* **UI Framework**: [Svelte 5](https://svelte.dev/) with runes (`$state`, `$derived`, `$effect`) for fine-grained reactivity.
-* **Styling**: [Tailwind CSS v4](https://tailwindcss.com/) with [daisyUI 5](https://daisyui.com/) and FontAwesome icons.
-* **Bundling**: [Vite](https://vite.dev/) with `vite-plugin-singlefile` to inline all JavaScript, CSS, and SVG assets into one portable HTML file.
-* **Storage**: Native browser **IndexedDB** (`pairquill` database) stores:
-  * `documents`: Stories with content, world notes, character cards, tone notes, and context overrides.
-  * `profiles`: Saved LLM server endpoints, parameters, and prompt templates.
-  * `settings`: Theme preferences, typography, line measure, reply length, content rating, active story, and active profile.
-  * `generations`: History of prompt inputs, outputs, and token counts.
-* **Portability**:
-  * **Project Files** (`pairquill-project-YYYY-MM-DD.json`): Complete JSON backups containing all documents, world data, server profiles, and generation records.
-  * **Plain Text**: Standard `.txt` import and export for external editing or manuscript submission.
-
----
 
 ## License
 
-MIT
-
+MIT — see [LICENSE](LICENSE).
