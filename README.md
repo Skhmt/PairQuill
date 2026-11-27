@@ -67,7 +67,7 @@ Every request's system prompt is rendered from the profile's template (or a buil
 ## Chapter workflow
 
 1. **Enable chapters** from the top-bar menu — existing text becomes a single chapter (or start fresh).
-2. Manage chapters in the outline sidebar: **New** adds one after the active chapter, click to select, double-click (or the pen icon) to rename, drag rows to reorder, and the trash icon deletes (deleting the last chapter converts the story back to plain single-document mode). The sidebar is collapsible and resizable (180–480 px).
+2. Manage chapters in the outline sidebar: **New** adds one after the active chapter, click to select, double-click (or the pen icon) to rename, drag rows to reorder, and the trash icon deletes (deleting the last chapter converts the story back to plain single-document mode). The sidebar is collapsible and resizable (180–480 px, capped by available space on narrow windows so the editor column keeps at least ~120 px).
 3. Switch between **Chapter** and **Full story** views in the top bar — full-story view is read-only with separators; the "Ch. X of Y · Title" label and prev/next buttons navigate chapters.
 4. **Summaries:** each chapter has a summary box in the outline — write it manually or click **Auto** for an AI 3–5 sentence summary. A stale warning appears if the chapter is edited after summarizing. Toggle whether summaries are sent to the model in the Context modal (*Include chapter summaries*); only non-current chapters with a summary are included.
 5. **Generate:** Continue / Instruct operate on the active chapter only; the status bar shows chapter and total word counts.

@@ -70,16 +70,30 @@ function dblRow(id: string, title: string) {
 
 const MIN_WIDTH = 180
 const MAX_WIDTH = 480
+/** Minimum room to keep for the editor column — the outline can never claim more than this. */
+const MIN_EDITOR = 120
+/** Width of the persistent edge divider (w-2). */
+const EDGE_W = 8
 let resizing = $state(false)
 let dragId = $state<string | null>(null)
 let dragOverId = $state<string | null>(null)
+let rootEl: HTMLDivElement | undefined = $state()
+let asideEl: HTMLElement | undefined = $state()
 
 function handleEdgePointerDown(e: PointerEvent) {
   e.preventDefault()
   const startX = e.clientX
-  const startW = open ? width : 0
+  // Start from the *rendered* width so the drag maps 1:1 to the pointer even when
+  // the stored width is capped by the viewport (see the aside's style below).
+  const startW = open ? Math.min(width, asideEl?.getBoundingClientRect().width ?? width) : 0
   let moved = false
   resizing = true
+
+  // Clamp against the actual space: outline + divider must leave MIN_EDITOR px for
+  // the editor, so the outline can never be resized wider than the page.
+  const rowW = rootEl?.parentElement?.clientWidth ?? 0
+  const hi = rowW > 0 ? Math.min(MAX_WIDTH, Math.max(0, rowW - EDGE_W - MIN_EDITOR)) : MAX_WIDTH
+  const lo = Math.min(MIN_WIDTH, hi)
 
   function onMove(ev: PointerEvent) {
     const dx = ev.clientX - startX
@@ -88,7 +102,7 @@ function handleEdgePointerDown(e: PointerEvent) {
     if (!open && dx > 4) {
       onToggleOpen?.()
     }
-    const next = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, Math.round(startW + dx)))
+    const next = Math.max(lo, Math.min(hi, Math.round(startW + dx)))
     onResize?.(next)
   }
   function onUp() {
@@ -104,10 +118,11 @@ function handleEdgePointerDown(e: PointerEvent) {
 }
 </script>
 
-<div class="relative flex shrink-0">
+<div bind:this={rootEl} class="relative flex shrink-0">
   <aside
+    bind:this={asideEl}
     class={`flex shrink-0 flex-col overflow-hidden bg-base-200/50 ${resizing ? '' : 'transition-[width] duration-150'}`}
-    style={`width: ${open ? width : 0}px`}
+    style={`width: min(${open ? width : 0}px, max(0px, calc(100vw - ${EDGE_W + MIN_EDITOR}px)))`}
     aria-label="Chapters outline"
     aria-hidden={!open}
   >
