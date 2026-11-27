@@ -222,7 +222,13 @@ async function loadAll() {
       const rawTheme = settings.theme as string
       if (!THEMES.includes(rawTheme as ThemeName)) settings.theme = rawTheme === 'light' ? 'caramellatte' : 'abyss'
     }
-    generations = g.sort((a, b) => b.ts - a.ts).slice(0, MAX_GENERATIONS)
+    const sortedGenerations = g.sort((a, b) => b.ts - a.ts)
+    generations = sortedGenerations.slice(0, MAX_GENERATIONS)
+    for (const rec of generations) persistedGenerationIds.add(rec.id)
+    // Over-cap records are dropped from state but still sit in IndexedDB — queue them.
+    if (sortedGenerations.length > generations.length) {
+      pendingGenerationDeletes.push(...sortedGenerations.slice(generations.length).map((r) => r.id))
+    }
     void requestPersistentStorage()
   } catch (e) {
     loadFailed = true
@@ -242,6 +248,10 @@ const deletedDocIds = new Set<string>()
 let profilesDirty = false
 let settingsDirty = false
 let generationsDirty = false
+// Generation records already written to IndexedDB this session, plus ids queued for
+// deletion — lets flushes write only the delta instead of rewriting every record.
+const persistedGenerationIds = new Set<string>()
+let pendingGenerationDeletes: string[] = []
 let skipInitialTrack = true
 
 function hasDirtyState(): boolean {
@@ -257,12 +267,13 @@ function plain<T>(value: T): T {
 }
 
 /**
- * Sync one keyed store with the in-memory list: write every current record first, then
+ * Sync a keyed store with the in-memory list: write every current record first, then
  * delete anything still sitting in IndexedDB that is no longer in state — otherwise
- * deleted profiles or generation records would reappear on the next reload.
+ * deleted records would reappear on the next reload. Used for profiles; generations use
+ * cheaper delta writes in flushWritesOnce (see persistedGenerationIds).
  */
 async function syncStore(
-  store: 'profiles' | 'generations',
+  store: 'profiles',
   items: { id: string }[],
 ): Promise<void> {
   const plainItems = items.map((i) => plain(i))
@@ -284,8 +295,15 @@ async function flushWritesOnce(): Promise<void> {
     const snapshots: { doc: StoryDoc; updatedAt: number }[] = []
     for (const id of dirtyDocIds) {
       const doc = docs.find((d) => d.id === id)
-      if (doc) snapshots.push({ doc: plain(doc), updatedAt: doc.updatedAt })
-      else dirtyDocIds.delete(id)
+      if (!doc) {
+        dirtyDocIds.delete(id)
+        continue
+      }
+      const snapshot = plain(doc)
+      // Chaptered docs keep their text in `chapters`; the joined `content` copy is
+      // rebuilt by normalizeDoc on load, so don't persist the same story twice.
+      if (isChaptered(doc)) snapshot.content = ''
+      snapshots.push({ doc: snapshot, updatedAt: doc.updatedAt })
     }
     if (snapshots.length > 0) {
       tasks.push(
@@ -336,11 +354,21 @@ async function flushWritesOnce(): Promise<void> {
     )
   }
 
-  if (generationsDirty) {
-    const snapshot = generations.slice(0, MAX_GENERATIONS)
+  if (generationsDirty || pendingGenerationDeletes.length > 0) {
+    // Delta write: only records not yet in IndexedDB are put, and trimmed/deleted ids
+    // are removed — the old full rewrite re-cloned up to MAX_GENERATIONS records on
+    // every generation event.
+    const fresh = generations.slice(0, MAX_GENERATIONS).filter((g) => !persistedGenerationIds.has(g.id))
+    const toDelete = pendingGenerationDeletes.filter((id) => !generations.some((g) => g.id === id))
     tasks.push(
-      syncStore('generations', snapshot).then(() => {
+      (async () => {
+        if (fresh.length > 0) await idbPutMany('generations', fresh.map((g) => plain(g)))
+        if (toDelete.length > 0) await idbDeleteMany('generations', toDelete)
+      })().then(() => {
         wrote = true
+        for (const g of fresh) persistedGenerationIds.add(g.id)
+        const done = new Set(toDelete)
+        pendingGenerationDeletes = pendingGenerationDeletes.filter((id) => !done.has(id))
         generationsDirty = false
       }),
     )
@@ -410,13 +438,43 @@ function touch(value: unknown): void {
   }
 }
 
-// Track activeDoc deeply (so typing/world edits save promptly without traversing inactive docs).
+// Track edits to the active doc without walking chapter content. The old deep
+// touch(activeDoc) re-read every field of every chapter on each keystroke, making
+// typing O(document size). Typing and chapter ops bump d.updatedAt, which the list
+// effect below already compares against saved versions to dirty-track and schedule
+// saves; this effect only needs the fields that can change without an updatedAt bump
+// (world/character edits, doc settings, chapter metadata and summaries).
 $effect(() => {
   if (!loaded || !activeDoc) return
-  touch(activeDoc)
+  const d = activeDoc
+  void d.title
+  void d.tone
+  void d.contextOverride
+  void d.viewMode
+  void d.activeChapterId
+  void d.includeChapterSummaries
+  for (const n of d.worldNotes) {
+    void n.id
+    void n.title
+    void n.content
+  }
+  for (const c of d.characters) {
+    void c.id
+    void c.name
+    void c.description
+  }
+  if (d.chapters) {
+    for (const ch of d.chapters) {
+      void ch.id
+      void ch.title
+      void ch.summary
+      void ch.summarySource
+      void ch.summaryUpdatedAt
+    }
+  }
   if (skipInitialTrack) return
-  dirtyDocIds.add(activeDoc.id)
-  deletedDocIds.delete(activeDoc.id)
+  dirtyDocIds.add(d.id)
+  deletedDocIds.delete(d.id)
   scheduleSave()
 })
 
@@ -640,7 +698,12 @@ function deleteDoc(doc: StoryDoc) {
   }
   askConfirm('Delete story', `Delete "${doc.title}"? This cannot be undone.`, () => {
     docs = docs.filter((d) => d.id !== doc.id)
+    const removedGenerations = generations.filter((g) => g.docId === doc.id)
     generations = generations.filter((g) => g.docId !== doc.id)
+    for (const r of removedGenerations) {
+      persistedGenerationIds.delete(r.id)
+      pendingGenerationDeletes.push(r.id)
+    }
     if (settings.activeDocId === doc.id) settings.activeDocId = docs[0]?.id ?? null
   }, 'Delete')
 }
@@ -929,7 +992,14 @@ function handleSummarizeChapter(id: string) {
 // ---------- generation callbacks ----------
 function handleGeneration(g: GenerationRecord) {
   generations.unshift(g)
-  if (generations.length > MAX_GENERATIONS) generations = generations.slice(0, MAX_GENERATIONS)
+  if (generations.length > MAX_GENERATIONS) {
+    const dropped = generations.slice(MAX_GENERATIONS)
+    generations = generations.slice(0, MAX_GENERATIONS)
+    for (const r of dropped) {
+      persistedGenerationIds.delete(r.id)
+      pendingGenerationDeletes.push(r.id)
+    }
+  }
 }
 
 // ---------- commands & keyboard shortcuts ----------

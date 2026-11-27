@@ -192,12 +192,17 @@ export function buildProjectFile(
     ...p,
     apiKey: includeApiKeys ? p.apiKey : '',
   }))
+  // Chaptered docs keep their text in `chapters`; drop the redundant joined `content`
+  // copy (normalizeDoc rebuilds it on import) so each story isn't stored twice.
+  const exportDocs = docs.map((d) =>
+    Array.isArray(d.chapters) && d.chapters.length > 0 ? { ...d, content: '' } : d,
+  )
   return JSON.parse(
     JSON.stringify({
       format: PROJECT_FORMAT,
       version: PROJECT_VERSION,
       exportedAt: Date.now(),
-      docs,
+      docs: exportDocs,
       profiles: sanitizedProfiles,
       generations,
       settings: { activeDocId, activeProfileId },
